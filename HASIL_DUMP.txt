@@ -76,7 +76,6 @@ Artisan::command('inspire', function () {
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\KandangController;
 use App\Http\Controllers\PopulasiController;
 use App\Http\Controllers\ProduksiTelurController;
@@ -103,10 +102,16 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::resource('pakan-kandang', PakanKandangController::class);
 
     Route::get('/laporan-pakan', [PakanKandangController::class, 'laporan'])->name('pakan.laporan');
+
+    // Laporan harian (rekap kiriman man power)
     Route::get('/admin/laporan', [LaporanHarianController::class, 'index'])->name('admin.laporan.index');
+
+    // Export Excel (aktifkan kalau method exportExcel sudah ada di controller)
+    // Route::get('/laporan-pakan/export', [PakanKandangController::class, 'exportExcel'])->name('pakan.laporan.export');
+    // Route::get('/admin/laporan/export', [LaporanHarianController::class, 'exportExcel'])->name('admin.laporan.export');
 });
 
-/* ========== KHUSUS MANPOWER ========== */
+/* ========== KHUSUS MAN POWER ========== */
 Route::middleware(['auth', 'role:manpower'])->group(function () {
     Route::get('/manpower/laporan', [LaporanHarianController::class, 'create'])->name('manpower.laporan.create');
     Route::post('/manpower/laporan', [LaporanHarianController::class, 'store'])->name('manpower.laporan.store');
@@ -132,6 +137,7 @@ abstract class Controller
 namespace App\Http\Controllers;
 
 use App\Models\Kandang;
+use App\Models\LaporanHarian;
 use App\Models\Populasi;
 use App\Models\ProduksiTelur;
 use App\Models\PenjualanTelur;
@@ -140,43 +146,57 @@ class DashboardController extends Controller
 {
     public function index()
     {
-        $totalKandang = Kandang::count();
-
-        $totalAyam = Populasi::sum('sisa');
-
-        $totalTelur = ProduksiTelur::sum('jumlah_produksi');
-
+        $totalKandang   = Kandang::count();
+        $totalAyam      = Populasi::sum('sisa');
+        $totalTelur     = ProduksiTelur::sum('jumlah_produksi');
         $totalPenjualan = PenjualanTelur::sum('total');
 
-        $produksiTerbaru = ProduksiTelur::with([
-            'kandang'
-        ])
-        ->latest('tanggal')
-        ->limit(10)
-        ->get();
+        $produksiTerbaru = ProduksiTelur::with(['kandang'])
+            ->latest('tanggal')
+            ->limit(10)
+            ->get();
 
-        $chart = ProduksiTelur::selectRaw(
-            'tanggal, SUM(jumlah_produksi) as total'
-        )
-        ->groupBy('tanggal')
-        ->orderBy('tanggal')
-        ->limit(7)
-        ->get();
+        /* ===== Grafik produksi telur ===== */
+        $chart = ProduksiTelur::selectRaw('tanggal, SUM(jumlah_produksi) as total')
+            ->groupBy('tanggal')
+            ->orderBy('tanggal')
+            ->limit(7)
+            ->get();
 
-        $chartLabels = $chart->map(
-            fn ($item) => $item->tanggal->format('d M')
-        );
+        $chartLabels = $chart->map(fn ($item) => $item->tanggal->format('d M'));
+        $chartData   = $chart->pluck('total');
 
-        $chartData = $chart->pluck('total');
+        /* ===== Data kematian (prioritas laporan manpower, fallback populasi) ===== */
+        $pakaiLaporan   = LaporanHarian::query()->exists();
+        $sumberKematian = $pakaiLaporan ? 'Laporan Harian Man Power' : 'Data Populasi';
+
+        $kematian = ($pakaiLaporan
+            ? LaporanHarian::selectRaw('tanggal, SUM(mati) as mati, SUM(afkir) as afkir')
+            : Populasi::selectRaw('tanggal, SUM(mati) as mati, SUM(afkir) as afkir'))
+            ->groupBy('tanggal')
+            ->orderBy('tanggal')
+            ->get();
+
+        $chartKematian = $kematian->take(-7)->values();
+
+        $kematianLabels = $chartKematian->map(fn ($item) => $item->tanggal->format('d M'));
+        $kematianMati   = $chartKematian->pluck('mati');
+        $kematianAfkir  = $chartKematian->pluck('afkir');
+
+        /* ===== Resume kematian ===== */
+        $totalMati  = (int) $kematian->sum('mati');
+        $totalAfkir = (int) $kematian->sum('afkir');
+
+        $denominator   = $totalMati + $totalAfkir + (int) $totalAyam;
+        $mortalityRate = $denominator > 0
+            ? round($totalMati / $denominator * 100, 2)
+            : 0;
 
         return view('dashboard', compact(
-            'totalKandang',
-            'totalAyam',
-            'totalTelur',
-            'totalPenjualan',
-            'produksiTerbaru',
-            'chartLabels',
-            'chartData'
+            'totalKandang', 'totalAyam', 'totalTelur', 'totalPenjualan',
+            'produksiTerbaru', 'chartLabels', 'chartData',
+            'sumberKematian', 'kematianLabels', 'kematianMati', 'kematianAfkir',
+            'totalMati', 'totalAfkir', 'mortalityRate'
         ));
     }
 }
@@ -367,10 +387,33 @@ class PakanKandangController extends Controller
     }
 
     /** Laporan sesuai layout: No | Tanggal | Total Masuk (zak) | Keluar per kandang | Sisa */
+       /** Halaman laporan pakan */
     public function laporan()
     {
-        $kandangs = Kandang::orderBy('id')->get();
+        [$laporan, $kandangs] = $this->dataLaporan();
 
+        return view('pakan_kandang.laporan', compact('laporan', 'kandangs'));
+    }
+
+    /** BARU: export laporan pakan ke Excel (.xls) */
+    public function exportExcel()
+    {
+        [$laporan, $kandangs] = $this->dataLaporan();
+
+        $html = view('pakan_kandang.export-excel', compact('laporan', 'kandangs'))->render();
+
+        return response($html, 200, [
+            'Content-Type'        => 'application/vnd.ms-excel',
+            'Content-Disposition' => 'attachment; filename="laporan-pakan-' . now()->format('Ymd-His') . '.xls"',
+            'Pragma'              => 'no-cache',
+            'Expires'             => '0',
+        ]);
+    }
+
+    /** BARU: menyusun data laporan (dipakai halaman laporan & export) */
+    private function dataLaporan(): array
+    {
+        $kandangs   = Kandang::orderBy('id')->get();
         $perTanggal = PakanKandang::orderBy('tanggal')->orderBy('id')->get()
             ->groupBy(fn ($r) => $r->tanggal->toDateString());
 
@@ -398,7 +441,7 @@ class PakanKandangController extends Controller
             ];
         }
 
-        return view('pakan_kandang.laporan', compact('laporan', 'kandangs'));
+        return [$laporan, $kandangs];
     }
 }
 
@@ -626,85 +669,71 @@ class PopulasiController extends Controller
 {
     public function index()
     {
-        $populasis = Populasi::with('kandang')
-            ->latest('tanggal')
-            ->get();
-
+        $populasis = Populasi::with('kandang')->latest('tanggal')->get();
         return view('populasi.index', compact('populasis'));
     }
 
     public function create()
     {
         $kandangs = Kandang::all();
-
         return view('populasi.create', compact('kandangs'));
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'tanggal' => 'required|date',
-            'hidup' => 'required|integer|min:0',
-            'mati' => 'required|integer|min:0',
-            'afkir' => 'required|integer|min:0',
-            'sisa' => 'required|integer|min:0',
-            'usia' => 'required|integer|min:0',
+            'tanggal'    => 'required|date',
+            'hidup'      => 'required|integer|min:0',
+            'mati'       => 'required|integer|min:0',
+            'afkir'      => 'required|integer|min:0',
+            'usia'       => 'required|integer|min:0',
             'kandang_id' => 'required|exists:kandang,id',
         ]);
 
+        // SISA OTOMATIS = hidup - mati - afkir
+        $validated['sisa'] = max(0, $validated['hidup'] - $validated['mati'] - $validated['afkir']);
+
         Populasi::create($validated);
 
-        return redirect()
-            ->route('populasi.index')
+        return redirect()->route('populasi.index')
             ->with('success', 'Data populasi berhasil ditambahkan.');
     }
 
     public function show(Populasi $populasi)
     {
-        $populasi->load([
-            'kandang',
-            'produksiTelur',
-            'pemberianPakan',
-        ]);
-
+        $populasi->load(['kandang', 'produksiTelur', 'pemberianPakan']);
         return view('populasi.show', compact('populasi'));
     }
 
     public function edit(Populasi $populasi)
     {
         $kandangs = Kandang::all();
-
-        return view('populasi.edit', compact(
-            'populasi',
-            'kandangs'
-        ));
+        return view('populasi.edit', compact('populasi', 'kandangs'));
     }
 
     public function update(Request $request, Populasi $populasi)
     {
         $validated = $request->validate([
-            'tanggal' => 'required|date',
-            'hidup' => 'required|integer|min:0',
-            'mati' => 'required|integer|min:0',
-            'afkir' => 'required|integer|min:0',
-            'sisa' => 'required|integer|min:0',
-            'usia' => 'required|integer|min:0',
+            'tanggal'    => 'required|date',
+            'hidup'      => 'required|integer|min:0',
+            'mati'       => 'required|integer|min:0',
+            'afkir'      => 'required|integer|min:0',
+            'usia'       => 'required|integer|min:0',
             'kandang_id' => 'required|exists:kandang,id',
         ]);
 
+        $validated['sisa'] = max(0, $validated['hidup'] - $validated['mati'] - $validated['afkir']);
+
         $populasi->update($validated);
 
-        return redirect()
-            ->route('populasi.index')
+        return redirect()->route('populasi.index')
             ->with('success', 'Data populasi berhasil diperbarui.');
     }
 
     public function destroy(Populasi $populasi)
     {
         $populasi->delete();
-
-        return redirect()
-            ->route('populasi.index')
+        return redirect()->route('populasi.index')
             ->with('success', 'Data populasi berhasil dihapus.');
     }
 }
@@ -722,102 +751,125 @@ use Illuminate\Http\Request;
 
 class ProduksiTelurController extends Controller
 {
+    /** Laporan pivot per tanggal (sesuai spreadsheet) */
     public function index()
     {
-        $produksis = ProduksiTelur::with([
-            'kandang',
-            'populasi',
-        ])
-            ->latest('tanggal')
-            ->get();
+        $kandangs = Kandang::orderBy('id')->get();
 
-        return view('produksi_telur.index', compact('produksis'));
+        $perTanggal = ProduksiTelur::orderBy('tanggal')->orderBy('id')->get()
+            ->groupBy(fn ($r) => $r->tanggal->toDateString());
+
+        $laporan = [];
+        foreach ($perTanggal as $tanggal => $items) {
+            $row = [
+                'tanggal'       => $tanggal,
+                'items'         => $items,
+                'perKandang'    => [],
+                'totalPopulasi' => 0,
+                'totalProduksi' => 0,
+            ];
+
+            foreach ($kandangs as $kandang) {
+                $item = $items->firstWhere('kandang_id', $kandang->id);
+                $pop  = $item ? (int) $item->sisa_ayam : 0;
+                $prod = $item ? (int) $item->jumlah_produksi : 0;
+
+                $row['perKandang'][$kandang->id] = [
+                    'populasi'   => $pop,
+                    'produksi'   => $prod,
+                    'persentase' => $pop > 0 ? round($prod / $pop * 100, 2) : 0,
+                ];
+
+                $row['totalPopulasi'] += $pop;
+                $row['totalProduksi'] += $prod;
+            }
+
+            $row['totalPersentase'] = $row['totalPopulasi'] > 0
+                ? round($row['totalProduksi'] / $row['totalPopulasi'] * 100, 2)
+                : 0;
+
+            $laporan[] = $row;
+        }
+
+        return view('produksi_telur.index', compact('kandangs', 'laporan'));
     }
 
     public function create()
     {
-        $kandangs = Kandang::all();
-        $populasis = Populasi::with('kandang')
-            ->latest('tanggal')
-            ->get();
-
-        return view('produksi_telur.create', compact(
-            'kandangs',
-            'populasis'
-        ));
+        return view('produksi_telur.create', [
+            'kandangs'     => Kandang::orderBy('id')->get(),
+            'populisis'    => Populasi::with('kandang')->latest('tanggal')->get(),
+            'sisaPopulasi' => Populasi::pluck('sisa', 'id'),
+        ]);
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'tanggal' => 'required|date',
-            'populasi_id' => 'required|exists:populasi,id',
-            'kandang_id' => 'required|exists:kandang,id',
+            'tanggal'         => 'required|date',
+            'kandang_id'      => 'required|exists:kandang,id',
+            'populasi_id'     => 'required|exists:populasi,id',
             'jumlah_produksi' => 'required|integer|min:0',
-            'presentase' => 'required|numeric|min:0|max:100',
-            'mati' => 'required|integer|min:0',
-            'afkir' => 'required|integer|min:0',
-            'sisa_ayam' => 'required|integer|min:0',
-            'telur_bagus' => 'required|integer|min:0',
-            'telur_reject' => 'required|integer|min:0',
+            'telur_bagus'     => 'required|integer|min:0',
+            'telur_reject'    => 'required|integer|min:0',
+            'mati'            => 'required|integer|min:0',
+            'afkir'           => 'required|integer|min:0',
         ]);
+
+        // SISA & PERSENTASE otomatis dari populasi yang dipilih
+        $populasi = Populasi::findOrFail($validated['populasi_id']);
+
+        $validated['sisa_ayam']  = (int) $populasi->sisa;
+        $validated['presentase'] = $populasi->sisa > 0
+            ? round($validated['jumlah_produksi'] / $populasi->sisa * 100, 2)
+            : 0;
 
         ProduksiTelur::create($validated);
 
-        return redirect()
-            ->route('produksi-telur.index')
+        return redirect()->route('produksi-telur.index')
             ->with('success', 'Produksi telur berhasil ditambahkan.');
     }
 
     public function show(ProduksiTelur $produksiTelur)
     {
-        $produksiTelur->load([
-            'kandang',
-            'populasi',
-            'penjualanTelur',
-        ]);
+        $produksiTelur->load(['kandang', 'populasi', 'penjualanTelur']);
 
-        return view(
-            'produksi_telur.show',
-            compact('produksiTelur')
-        );
+        return view('produksi_telur.show', compact('produksiTelur'));
     }
 
     public function edit(ProduksiTelur $produksiTelur)
     {
-        $kandangs = Kandang::all();
-        $populasis = Populasi::with('kandang')
-            ->latest('tanggal')
-            ->get();
-
-        return view('produksi_telur.edit', compact(
-            'produksiTelur',
-            'kandangs',
-            'populasis'
-        ));
+        return view('produksi_telur.edit', [
+            'produksiTelur' => $produksiTelur,
+            'kandangs'      => Kandang::orderBy('id')->get(),
+            'populisis'     => Populasi::with('kandang')->latest('tanggal')->get(),
+            'sisaPopulasi'  => Populasi::pluck('sisa', 'id'),
+        ]);
     }
 
-    public function update(
-        Request $request,
-        ProduksiTelur $produksiTelur
-    ) {
+    public function update(Request $request, ProduksiTelur $produksiTelur)
+    {
         $validated = $request->validate([
-            'tanggal' => 'required|date',
-            'populasi_id' => 'required|exists:populasi,id',
-            'kandang_id' => 'required|exists:kandang,id',
+            'tanggal'         => 'required|date',
+            'kandang_id'      => 'required|exists:kandang,id',
+            'populasi_id'     => 'required|exists:populasi,id',
             'jumlah_produksi' => 'required|integer|min:0',
-            'presentase' => 'required|numeric|min:0|max:100',
-            'mati' => 'required|integer|min:0',
-            'afkir' => 'required|integer|min:0',
-            'sisa_ayam' => 'required|integer|min:0',
-            'telur_bagus' => 'required|integer|min:0',
-            'telur_reject' => 'required|integer|min:0',
+            'telur_bagus'     => 'required|integer|min:0',
+            'telur_reject'    => 'required|integer|min:0',
+            'mati'            => 'required|integer|min:0',
+            'afkir'           => 'required|integer|min:0',
         ]);
+
+        $populasi = Populasi::findOrFail($validated['populasi_id']);
+
+        $validated['sisa_ayam']  = (int) $populasi->sisa;
+        $validated['presentase'] = $populasi->sisa > 0
+            ? round($validated['jumlah_produksi'] / $populasi->sisa * 100, 2)
+            : 0;
 
         $produksiTelur->update($validated);
 
-        return redirect()
-            ->route('produksi-telur.index')
+        return redirect()->route('produksi-telur.index')
             ->with('success', 'Produksi telur berhasil diperbarui.');
     }
 
@@ -825,8 +877,7 @@ class ProduksiTelurController extends Controller
     {
         $produksiTelur->delete();
 
-        return redirect()
-            ->route('produksi-telur.index')
+        return redirect()->route('produksi-telur.index')
             ->with('success', 'Produksi telur berhasil dihapus.');
     }
 }
@@ -2062,370 +2113,6 @@ class GuestLayout extends Component
 }
 
 
-===== C:\xampp\htdocs\peternakan_ayam\bootstrap\app.php =====
-<?php
-
-use Illuminate\Foundation\Application;
-use Illuminate\Foundation\Configuration\Exceptions;
-use Illuminate\Foundation\Configuration\Middleware;
-
-return Application::configure(basePath: dirname(__DIR__))
-    ->withRouting(
-        web: __DIR__.'/../routes/web.php',
-        commands: __DIR__.'/../routes/console.php',
-        health: '/up',
-    )
-    ->withMiddleware(function (Middleware $middleware) {
-        $middleware->alias([
-            'role' => \App\Http\Middleware\RoleMiddleware::class,
-        ]);
-    })
-    ->withExceptions(function (Exceptions $exceptions) {
-        //
-    })
-    ->create();
-
-
-===== C:\xampp\htdocs\peternakan_ayam\bootstrap\providers.php =====
-<?php
-
-use App\Providers\AppServiceProvider;
-
-return [
-    AppServiceProvider::class,
-];
-
-
-===== C:\xampp\htdocs\peternakan_ayam\bootstrap\cache\packages.php =====
-<?php return array (
-  'laravel/breeze' => 
-  array (
-    'providers' => 
-    array (
-      0 => 'Laravel\\Breeze\\BreezeServiceProvider',
-    ),
-  ),
-  'laravel/pail' => 
-  array (
-    'providers' => 
-    array (
-      0 => 'Laravel\\Pail\\PailServiceProvider',
-    ),
-  ),
-  'laravel/sail' => 
-  array (
-    'providers' => 
-    array (
-      0 => 'Laravel\\Sail\\SailServiceProvider',
-    ),
-  ),
-  'laravel/tinker' => 
-  array (
-    'providers' => 
-    array (
-      0 => 'Laravel\\Tinker\\TinkerServiceProvider',
-    ),
-  ),
-  'nesbot/carbon' => 
-  array (
-    'providers' => 
-    array (
-      0 => 'Carbon\\Laravel\\ServiceProvider',
-    ),
-  ),
-  'nunomaduro/collision' => 
-  array (
-    'providers' => 
-    array (
-      0 => 'NunoMaduro\\Collision\\Adapters\\Laravel\\CollisionServiceProvider',
-    ),
-  ),
-  'nunomaduro/termwind' => 
-  array (
-    'providers' => 
-    array (
-      0 => 'Termwind\\Laravel\\TermwindServiceProvider',
-    ),
-  ),
-  'pestphp/pest-plugin-laravel' => 
-  array (
-    'providers' => 
-    array (
-      0 => 'Pest\\Laravel\\PestServiceProvider',
-    ),
-  ),
-);
-
-===== C:\xampp\htdocs\peternakan_ayam\bootstrap\cache\services.php =====
-<?php return array (
-  'providers' => 
-  array (
-    0 => 'Illuminate\\Auth\\AuthServiceProvider',
-    1 => 'Illuminate\\Broadcasting\\BroadcastServiceProvider',
-    2 => 'Illuminate\\Bus\\BusServiceProvider',
-    3 => 'Illuminate\\Cache\\CacheServiceProvider',
-    4 => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    5 => 'Illuminate\\Concurrency\\ConcurrencyServiceProvider',
-    6 => 'Illuminate\\Cookie\\CookieServiceProvider',
-    7 => 'Illuminate\\Database\\DatabaseServiceProvider',
-    8 => 'Illuminate\\Encryption\\EncryptionServiceProvider',
-    9 => 'Illuminate\\Filesystem\\FilesystemServiceProvider',
-    10 => 'Illuminate\\Foundation\\Providers\\FoundationServiceProvider',
-    11 => 'Illuminate\\Hashing\\HashServiceProvider',
-    12 => 'Illuminate\\Mail\\MailServiceProvider',
-    13 => 'Illuminate\\Notifications\\NotificationServiceProvider',
-    14 => 'Illuminate\\Pagination\\PaginationServiceProvider',
-    15 => 'Illuminate\\Auth\\Passwords\\PasswordResetServiceProvider',
-    16 => 'Illuminate\\Pipeline\\PipelineServiceProvider',
-    17 => 'Illuminate\\Queue\\QueueServiceProvider',
-    18 => 'Illuminate\\Redis\\RedisServiceProvider',
-    19 => 'Illuminate\\Session\\SessionServiceProvider',
-    20 => 'Illuminate\\Translation\\TranslationServiceProvider',
-    21 => 'Illuminate\\Validation\\ValidationServiceProvider',
-    22 => 'Illuminate\\View\\ViewServiceProvider',
-    23 => 'Laravel\\Breeze\\BreezeServiceProvider',
-    24 => 'Laravel\\Pail\\PailServiceProvider',
-    25 => 'Laravel\\Sail\\SailServiceProvider',
-    26 => 'Laravel\\Tinker\\TinkerServiceProvider',
-    27 => 'Carbon\\Laravel\\ServiceProvider',
-    28 => 'NunoMaduro\\Collision\\Adapters\\Laravel\\CollisionServiceProvider',
-    29 => 'Termwind\\Laravel\\TermwindServiceProvider',
-    30 => 'Pest\\Laravel\\PestServiceProvider',
-    31 => 'App\\Providers\\AppServiceProvider',
-  ),
-  'eager' => 
-  array (
-    0 => 'Illuminate\\Auth\\AuthServiceProvider',
-    1 => 'Illuminate\\Cookie\\CookieServiceProvider',
-    2 => 'Illuminate\\Database\\DatabaseServiceProvider',
-    3 => 'Illuminate\\Encryption\\EncryptionServiceProvider',
-    4 => 'Illuminate\\Filesystem\\FilesystemServiceProvider',
-    5 => 'Illuminate\\Foundation\\Providers\\FoundationServiceProvider',
-    6 => 'Illuminate\\Notifications\\NotificationServiceProvider',
-    7 => 'Illuminate\\Pagination\\PaginationServiceProvider',
-    8 => 'Illuminate\\Session\\SessionServiceProvider',
-    9 => 'Illuminate\\View\\ViewServiceProvider',
-    10 => 'Laravel\\Pail\\PailServiceProvider',
-    11 => 'Carbon\\Laravel\\ServiceProvider',
-    12 => 'NunoMaduro\\Collision\\Adapters\\Laravel\\CollisionServiceProvider',
-    13 => 'Termwind\\Laravel\\TermwindServiceProvider',
-    14 => 'Pest\\Laravel\\PestServiceProvider',
-    15 => 'App\\Providers\\AppServiceProvider',
-  ),
-  'deferred' => 
-  array (
-    'Illuminate\\Broadcasting\\BroadcastManager' => 'Illuminate\\Broadcasting\\BroadcastServiceProvider',
-    'Illuminate\\Contracts\\Broadcasting\\Factory' => 'Illuminate\\Broadcasting\\BroadcastServiceProvider',
-    'Illuminate\\Contracts\\Broadcasting\\Broadcaster' => 'Illuminate\\Broadcasting\\BroadcastServiceProvider',
-    'Illuminate\\Bus\\Dispatcher' => 'Illuminate\\Bus\\BusServiceProvider',
-    'Illuminate\\Contracts\\Bus\\Dispatcher' => 'Illuminate\\Bus\\BusServiceProvider',
-    'Illuminate\\Contracts\\Bus\\QueueingDispatcher' => 'Illuminate\\Bus\\BusServiceProvider',
-    'Illuminate\\Bus\\BatchRepository' => 'Illuminate\\Bus\\BusServiceProvider',
-    'Illuminate\\Bus\\DatabaseBatchRepository' => 'Illuminate\\Bus\\BusServiceProvider',
-    'cache' => 'Illuminate\\Cache\\CacheServiceProvider',
-    'cache.store' => 'Illuminate\\Cache\\CacheServiceProvider',
-    'cache.psr6' => 'Illuminate\\Cache\\CacheServiceProvider',
-    'memcached.connector' => 'Illuminate\\Cache\\CacheServiceProvider',
-    'Illuminate\\Cache\\RateLimiter' => 'Illuminate\\Cache\\CacheServiceProvider',
-    'Illuminate\\Foundation\\Console\\AboutCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Cache\\Console\\ClearCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Cache\\Console\\ForgetCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ClearCompiledCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Auth\\Console\\ClearResetsCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ConfigCacheCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ConfigClearCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ConfigShowCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\DbCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\MonitorCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\PruneCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\ShowCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\TableCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\WipeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\DownCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\EnvironmentCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\EnvironmentDecryptCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\EnvironmentEncryptCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\EventCacheCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\EventClearCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\EventListCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Concurrency\\Console\\InvokeSerializedClosureCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\KeyGenerateCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\OptimizeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\OptimizeClearCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\PackageDiscoverCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Cache\\Console\\PruneStaleTagsCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Queue\\Console\\ClearCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Queue\\Console\\ListFailedCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Queue\\Console\\FlushFailedCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Queue\\Console\\ForgetFailedCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Queue\\Console\\ListenCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Queue\\Console\\MonitorCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Queue\\Console\\PauseCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Queue\\Console\\PruneBatchesCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Queue\\Console\\PruneFailedJobsCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Queue\\Console\\RestartCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Queue\\Console\\ResumeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Queue\\Console\\RetryCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Queue\\Console\\RetryBatchCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Queue\\Console\\WorkCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ReloadCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\RouteCacheCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\RouteClearCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\RouteListCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\DumpCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\Seeds\\SeedCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Console\\Scheduling\\ScheduleFinishCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Console\\Scheduling\\ScheduleListCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Console\\Scheduling\\ScheduleRunCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Console\\Scheduling\\ScheduleClearCacheCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Console\\Scheduling\\ScheduleTestCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Console\\Scheduling\\ScheduleWorkCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Console\\Scheduling\\ScheduleInterruptCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\ShowModelCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\StorageLinkCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\StorageUnlinkCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\UpCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ViewCacheCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ViewClearCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ApiInstallCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\BroadcastingInstallCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Cache\\Console\\CacheTableCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\CastMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ChannelListCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ChannelMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ClassMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ComponentMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ConfigMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ConfigPublishCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ConsoleMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Routing\\Console\\ControllerMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\DocsCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\EnumMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\EventGenerateCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\EventMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ExceptionMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\Factories\\FactoryMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\InterfaceMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\JobMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\JobMiddlewareMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\LangPublishCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ListenerMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\MailMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Routing\\Console\\MiddlewareMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ModelMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\NotificationMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Notifications\\Console\\NotificationTableCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ObserverMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\PolicyMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ProviderMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Queue\\Console\\FailedTableCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Queue\\Console\\TableCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Queue\\Console\\BatchesTableCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\RequestMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ResourceMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\RuleMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ScopeMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\Seeds\\SeederMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Session\\Console\\SessionTableCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ServeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\StubPublishCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\TestMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\TraitMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\VendorPublishCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Foundation\\Console\\ViewMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'migrator' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'migration.repository' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'migration.creator' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Migrations\\Migrator' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\Migrations\\MigrateCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\Migrations\\FreshCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\Migrations\\InstallCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\Migrations\\RefreshCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\Migrations\\ResetCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\Migrations\\RollbackCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\Migrations\\StatusCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Database\\Console\\Migrations\\MigrateMakeCommand' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'composer' => 'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider',
-    'Illuminate\\Concurrency\\ConcurrencyManager' => 'Illuminate\\Concurrency\\ConcurrencyServiceProvider',
-    'hash' => 'Illuminate\\Hashing\\HashServiceProvider',
-    'hash.driver' => 'Illuminate\\Hashing\\HashServiceProvider',
-    'mail.manager' => 'Illuminate\\Mail\\MailServiceProvider',
-    'mailer' => 'Illuminate\\Mail\\MailServiceProvider',
-    'Illuminate\\Mail\\Markdown' => 'Illuminate\\Mail\\MailServiceProvider',
-    'auth.password' => 'Illuminate\\Auth\\Passwords\\PasswordResetServiceProvider',
-    'auth.password.broker' => 'Illuminate\\Auth\\Passwords\\PasswordResetServiceProvider',
-    'Illuminate\\Contracts\\Pipeline\\Hub' => 'Illuminate\\Pipeline\\PipelineServiceProvider',
-    'pipeline' => 'Illuminate\\Pipeline\\PipelineServiceProvider',
-    'queue' => 'Illuminate\\Queue\\QueueServiceProvider',
-    'queue.connection' => 'Illuminate\\Queue\\QueueServiceProvider',
-    'queue.failer' => 'Illuminate\\Queue\\QueueServiceProvider',
-    'queue.listener' => 'Illuminate\\Queue\\QueueServiceProvider',
-    'queue.worker' => 'Illuminate\\Queue\\QueueServiceProvider',
-    'redis' => 'Illuminate\\Redis\\RedisServiceProvider',
-    'redis.connection' => 'Illuminate\\Redis\\RedisServiceProvider',
-    'translator' => 'Illuminate\\Translation\\TranslationServiceProvider',
-    'translation.loader' => 'Illuminate\\Translation\\TranslationServiceProvider',
-    'validator' => 'Illuminate\\Validation\\ValidationServiceProvider',
-    'validation.presence' => 'Illuminate\\Validation\\ValidationServiceProvider',
-    'Illuminate\\Contracts\\Validation\\UncompromisedVerifier' => 'Illuminate\\Validation\\ValidationServiceProvider',
-    'Laravel\\Breeze\\Console\\InstallCommand' => 'Laravel\\Breeze\\BreezeServiceProvider',
-    'Laravel\\Sail\\Console\\InstallCommand' => 'Laravel\\Sail\\SailServiceProvider',
-    'Laravel\\Sail\\Console\\PublishCommand' => 'Laravel\\Sail\\SailServiceProvider',
-    'command.tinker' => 'Laravel\\Tinker\\TinkerServiceProvider',
-  ),
-  'when' => 
-  array (
-    'Illuminate\\Broadcasting\\BroadcastServiceProvider' => 
-    array (
-    ),
-    'Illuminate\\Bus\\BusServiceProvider' => 
-    array (
-    ),
-    'Illuminate\\Cache\\CacheServiceProvider' => 
-    array (
-    ),
-    'Illuminate\\Foundation\\Providers\\ConsoleSupportServiceProvider' => 
-    array (
-    ),
-    'Illuminate\\Concurrency\\ConcurrencyServiceProvider' => 
-    array (
-    ),
-    'Illuminate\\Hashing\\HashServiceProvider' => 
-    array (
-    ),
-    'Illuminate\\Mail\\MailServiceProvider' => 
-    array (
-    ),
-    'Illuminate\\Auth\\Passwords\\PasswordResetServiceProvider' => 
-    array (
-    ),
-    'Illuminate\\Pipeline\\PipelineServiceProvider' => 
-    array (
-    ),
-    'Illuminate\\Queue\\QueueServiceProvider' => 
-    array (
-    ),
-    'Illuminate\\Redis\\RedisServiceProvider' => 
-    array (
-    ),
-    'Illuminate\\Translation\\TranslationServiceProvider' => 
-    array (
-    ),
-    'Illuminate\\Validation\\ValidationServiceProvider' => 
-    array (
-    ),
-    'Laravel\\Breeze\\BreezeServiceProvider' => 
-    array (
-    ),
-    'Laravel\\Sail\\SailServiceProvider' => 
-    array (
-    ),
-    'Laravel\\Tinker\\TinkerServiceProvider' => 
-    array (
-    ),
-  ),
-);
-
 ===== C:\xampp\htdocs\peternakan_ayam\database\migrations\0001_01_01_000000_create_users_table.php =====
 <?php
 
@@ -2936,31 +2623,36 @@ return new class extends Migration
 };
 
 
-===== C:\xampp\htdocs\peternakan_ayam\database\seeders\DatabaseSeeder.php =====
+===== C:\xampp\htdocs\peternakan_ayam\database\migrations\2026_08_18_000001_make_produksi_telur_populasi_nullable.php =====
 <?php
 
-namespace Database\Seeders;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
-use App\Models\User;
-use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
-
-class DatabaseSeeder extends Seeder
+return new class extends Migration
 {
-    public function run(): void
+    public function up(): void
     {
-        User::updateOrCreate(
-            ['email' => 'admin@peternakan.com'],
-            ['name' => 'Administrator', 'role' => 'admin', 'password' => Hash::make('admin123')]
-        );
+        Schema::table('produksi_telur', function (Blueprint $table) {
+            $table->dropForeign(['populasi_id']);
+        });
 
-
-        User::updateOrCreate(
-            ['email' => 'manpower@peternakan.com'],
-            ['name' => 'Anak Kandang 1', 'role' => 'manpower', 'password' => Hash::make('manpower123')]
-        );
+        Schema::table('produksi_telur', function (Blueprint $table) {
+            $table->unsignedBigInteger('populasi_id')->nullable()->change();
+            $table->foreign('populasi_id')->references('id')->on('populasi')->nullOnDelete();
+        });
     }
-}
+
+    public function down(): void
+    {
+        Schema::table('produksi_telur', function (Blueprint $table) {
+            $table->dropForeign(['populasi_id']);
+            $table->unsignedBigInteger('populasi_id')->nullable(false)->change();
+            $table->foreign('populasi_id')->references('id')->on('populasi')->cascadeOnDelete();
+        });
+    }
+};
 
 
 ===== C:\xampp\htdocs\peternakan_ayam\resources\views\dashboard.blade.php =====
@@ -2969,472 +2661,219 @@ class DatabaseSeeder extends Seeder
 @section('title', 'Dashboard')
 
 @section('content')
-
 <div class="mb-4">
-
-    <h3 class="fw-bold mb-1">
-        Dashboard Peternakan
-    </h3>
-
-    <p class="text-muted mb-0">
-        Pantau kondisi peternakan, produksi telur, dan penggunaan pakan.
-    </p>
-
+    <h3 class="fw-bold mb-1">Dashboard Peternakan</h3>
+    <p class="text-muted mb-0">Pantau kondisi peternakan, produksi telur, dan penggunaan pakan.</p>
 </div>
-
 
 <!-- STATISTICS -->
-
 <div class="row g-4 mb-4">
-
     <div class="col-xl-3 col-md-6">
-
         <div class="stat-card">
-
             <div class="stat-top">
-
                 <div>
-                    <div class="stat-label mt-0">
-                        Total Kandang
-                    </div>
-
-                    <div class="stat-value">
-                        {{ $totalKandang ?? 0 }}
-                    </div>
+                    <div class="stat-label mt-0">Total Kandang</div>
+                    <div class="stat-value">{{ $totalKandang ?? 0 }}</div>
                 </div>
-
-                <div class="stat-icon icon-green">
-                    <i class="bi bi-house-door-fill"></i>
-                </div>
-
+                <div class="stat-icon icon-green"><i class="bi bi-house-door-fill"></i></div>
             </div>
-
-            <div class="stat-description">
-                Kandang aktif
-            </div>
-
+            <div class="stat-description">Kandang aktif</div>
         </div>
-
     </div>
-
-
     <div class="col-xl-3 col-md-6">
-
         <div class="stat-card">
-
             <div class="stat-top">
-
                 <div>
-
-                    <div class="stat-label mt-0">
-                        Populasi Ayam
-                    </div>
-
-                    <div class="stat-value">
-                        {{ number_format($totalAyam ?? 0) }}
-                    </div>
-
+                    <div class="stat-label mt-0">Populasi Ayam</div>
+                    <div class="stat-value">{{ number_format($totalAyam ?? 0) }}</div>
                 </div>
-
-                <div class="stat-icon icon-blue">
-                    <i class="bi bi-people-fill"></i>
-                </div>
-
+                <div class="stat-icon icon-blue"><i class="bi bi-people-fill"></i></div>
             </div>
-
-            <div class="stat-description">
-                Ayam hidup saat ini
-            </div>
-
+            <div class="stat-description">Ayam hidup saat ini</div>
         </div>
-
     </div>
-
-
     <div class="col-xl-3 col-md-6">
-
         <div class="stat-card">
-
             <div class="stat-top">
-
                 <div>
-
-                    <div class="stat-label mt-0">
-                        Produksi Telur
-                    </div>
-
-                    <div class="stat-value">
-                        {{ number_format($totalTelur ?? 0) }}
-                    </div>
-
+                    <div class="stat-label mt-0">Produksi Telur</div>
+                    <div class="stat-value">{{ number_format($totalTelur ?? 0) }}</div>
                 </div>
-
-                <div class="stat-icon icon-yellow">
-                    <i class="bi bi-egg-fill"></i>
-                </div>
-
+                <div class="stat-icon icon-yellow"><i class="bi bi-egg-fill"></i></div>
             </div>
-
-            <div class="stat-description">
-                Total produksi
-            </div>
-
+            <div class="stat-description">Total produksi</div>
         </div>
-
     </div>
-
-
     <div class="col-xl-3 col-md-6">
-
         <div class="stat-card">
-
             <div class="stat-top">
-
                 <div>
-
-                    <div class="stat-label mt-0">
-                        Penjualan
-                    </div>
-
-                    <div class="stat-value">
-                        Rp {{ number_format($totalPenjualan ?? 0, 0, ',', '.') }}
-                    </div>
-
+                    <div class="stat-label mt-0">Penjualan</div>
+                    <div class="stat-value">Rp {{ number_format($totalPenjualan ?? 0, 0, ',', '.') }}</div>
                 </div>
-
-                <div class="stat-icon icon-green">
-                    <i class="bi bi-cash-stack"></i>
-                </div>
-
+                <div class="stat-icon icon-green"><i class="bi bi-cash-stack"></i></div>
             </div>
-
-            <div class="stat-description">
-                Total penjualan telur
-            </div>
-
+            <div class="stat-description">Total penjualan telur</div>
         </div>
-
     </div>
-
 </div>
-
 
 <!-- CHART + QUICK MENU -->
-
 <div class="row g-4 mb-4">
-
     <div class="col-xl-8">
-
         <div class="panel">
-
             <div class="panel-header">
-
                 <div>
-
-                    <div class="panel-title">
-                        Produksi Telur
-                    </div>
-
-                    <div class="text-muted small">
-                        Perkembangan produksi telur
-                    </div>
-
+                    <div class="panel-title">Produksi Telur</div>
+                    <div class="text-muted small">Perkembangan produksi telur</div>
                 </div>
-
-                <a
-                    href="{{ route('produksi-telur.index') }}"
-                    class="panel-link"
-                >
-                    Lihat semua
-                </a>
-
+                <a href="{{ route('produksi-telur.index') }}" class="panel-link">Lihat semua</a>
             </div>
-
-            <canvas
-                id="productionChart"
-                height="110"
-            ></canvas>
-
+            <canvas id="productionChart" height="110"></canvas>
         </div>
-
     </div>
-
-
     <div class="col-xl-4">
-
         <div class="panel">
-
             <div class="panel-header">
-
-                <div class="panel-title">
-                    Akses Cepat
-                </div>
-
+                <div class="panel-title">Akses Cepat</div>
             </div>
-
-
             <div class="d-grid gap-2">
-
-                <a
-                    href="{{ route('kandang.create') }}"
-                    class="btn btn-light text-start p-3"
-                >
-                    <i class="bi bi-house-add-fill text-success me-2"></i>
-
-                    Tambah Kandang
-
+                <a href="{{ route('kandang.create') }}" class="btn btn-light text-start p-3">
+                    <i class="bi bi-house-add-fill text-success me-2"></i> Tambah Kandang
                     <i class="bi bi-chevron-right float-end"></i>
                 </a>
-
-
-                <a
-                    href="{{ route('populasi.create') }}"
-                    class="btn btn-light text-start p-3"
-                >
-                    <i class="bi bi-plus-circle-fill text-primary me-2"></i>
-
-                    Input Populasi
-
+                <a href="{{ route('populasi.create') }}" class="btn btn-light text-start p-3">
+                    <i class="bi bi-plus-circle-fill text-primary me-2"></i> Input Populasi
                     <i class="bi bi-chevron-right float-end"></i>
                 </a>
-
-
-                <a
-                    href="{{ route('produksi-telur.create') }}"
-                    class="btn btn-light text-start p-3"
-                >
-                    <i class="bi bi-egg-fill text-warning me-2"></i>
-
-                    Input Produksi Telur
-
+                <a href="{{ route('produksi-telur.create') }}" class="btn btn-light text-start p-3">
+                    <i class="bi bi-egg-fill text-warning me-2"></i> Input Produksi Telur
                     <i class="bi bi-chevron-right float-end"></i>
                 </a>
-
-
-                <a
-                    href="{{ route('penjualan-telur.create') }}"
-                    class="btn btn-light text-start p-3"
-                >
-                    <i class="bi bi-cart-plus-fill text-success me-2"></i>
-
-                    Catat Penjualan
-
+                <a href="{{ route('penjualan-telur.create') }}" class="btn btn-light text-start p-3">
+                    <i class="bi bi-cart-plus-fill text-success me-2"></i> Catat Penjualan
                     <i class="bi bi-chevron-right float-end"></i>
                 </a>
-
-
-                <a
-                    href="{{ route('pemberian-pakan.create') }}"
-                    class="btn btn-light text-start p-3"
-                >
-                    <i class="bi bi-basket-fill text-danger me-2"></i>
-
-                    Input Pemberian Pakan
-
+                <a href="{{ route('pemberian-pakan.create') }}" class="btn btn-light text-start p-3">
+                    <i class="bi bi-basket-fill text-danger me-2"></i> Input Pemberian Pakan
                     <i class="bi bi-chevron-right float-end"></i>
                 </a>
-
             </div>
-
         </div>
-
     </div>
-
 </div>
 
+<!-- GRAFIK KEMATIAN -->
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="panel">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">Grafik Kematian Ayam</div>
+                    <div class="text-muted small">
+                        Mati & afkir per tanggal — sumber: {{ $sumberKematian ?? '-' }} (7 catatan terakhir)
+                    </div>
+                </div>
+            </div>
+            <canvas id="mortalityChart" height="90"></canvas>
+        </div>
+    </div>
+</div>
 
 <!-- TABLE -->
-
 <div class="row g-4">
-
     <div class="col-12">
-
         <div class="panel">
-
             <div class="panel-header">
-
                 <div>
-
-                    <div class="panel-title">
-                        Produksi Terbaru
-                    </div>
-
-                    <div class="text-muted small">
-                        Data produksi telur terakhir
-                    </div>
-
+                    <div class="panel-title">Produksi Terbaru</div>
+                    <div class="text-muted small">Data produksi telur terakhir</div>
                 </div>
-
-                <a
-                    href="{{ route('produksi-telur.index') }}"
-                    class="panel-link"
-                >
-                    Lihat semua
-                </a>
-
+                <a href="{{ route('produksi-telur.index') }}" class="panel-link">Lihat semua</a>
             </div>
-
-
             <div class="table-responsive">
-
                 <table class="table">
-
                     <thead>
-
-                    <tr>
-
-                        <th>
-                            Tanggal
-                        </th>
-
-                        <th>
-                            Kandang
-                        </th>
-
-                        <th>
-                            Produksi
-                        </th>
-
-                        <th>
-                            Telur Bagus
-                        </th>
-
-                        <th>
-                            Reject
-                        </th>
-
-                        <th>
-                            Status
-                        </th>
-
-                    </tr>
-
-                    </thead>
-
-
-                    <tbody>
-
-                    @forelse($produksiTerbaru ?? [] as $produksi)
-
                         <tr>
-
-                            <td>
-                                {{ $produksi->tanggal->format('d M Y') }}
-                            </td>
-
-                            <td>
-                                {{ $produksi->kandang->nama ?? '-' }}
-                            </td>
-
-                            <td class="fw-semibold">
-                                {{ number_format($produksi->jumlah_produksi) }}
-                            </td>
-
-                            <td>
-                                {{ number_format($produksi->telur_bagus) }}
-                            </td>
-
-                            <td>
-                                {{ number_format($produksi->telur_reject) }}
-                            </td>
-
-                            <td>
-
-
-                            </td>
-
+                            <th>Tanggal</th>
+                            <th>Kandang</th>
+                            <th>Produksi</th>
+                            <th>Telur Bagus</th>
+                            <th>Reject</th>
                         </tr>
-
-                    @empty
-
+                    </thead>
+                    <tbody>
+                        @forelse($produksiTerbaru ?? [] as $produksi)
                         <tr>
-
-                            <td
-                                colspan="6"
-                                class="text-center text-muted py-4"
-                            >
+                            <td>{{ $produksi->tanggal->format('d M Y') }}</td>
+                            <td>{{ $produksi->kandang->nama ?? '-' }}</td>
+                            <td class="fw-semibold">{{ number_format($produksi->jumlah_produksi) }}</td>
+                            <td>{{ number_format($produksi->telur_bagus) }}</td>
+                            <td>{{ number_format($produksi->telur_reject) }}</td>
+                        </tr>
+                        @empty
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">
                                 Belum ada data produksi telur.
                             </td>
-
                         </tr>
-
-                    @endforelse
-
+                        @endforelse
                     </tbody>
-
                 </table>
-
             </div>
-
         </div>
-
     </div>
-
 </div>
-
-
 @endsection
 
-
 @push('scripts')
-
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <script>
-
-    const ctx = document
-        .getElementById('productionChart');
-
-    new Chart(ctx, {
-
+    new Chart(document.getElementById('productionChart'), {
         type: 'line',
-
         data: {
-
             labels: {!! json_encode($chartLabels ?? []) !!},
-
             datasets: [{
-
                 label: 'Produksi Telur',
-
                 data: {!! json_encode($chartData ?? []) !!},
-
                 tension: 0.4,
-
                 fill: true,
-
                 borderWidth: 2
-
             }]
-
         },
-
         options: {
-
             responsive: true,
-
-            plugins: {
-
-                legend: {
-                    display: false
-                }
-
-            },
-
-            scales: {
-
-                y: {
-                    beginAtZero: true
-                }
-
-            }
-
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true } }
         }
-
     });
 
+    new Chart(document.getElementById('mortalityChart'), {
+        type: 'bar',
+        data: {
+            labels: {!! json_encode($kematianLabels ?? []) !!},
+            datasets: [
+                {
+                    label: 'Mati',
+                    data: {!! json_encode($kematianMati ?? []) !!},
+                    backgroundColor: 'rgba(220, 53, 69, 0.75)',
+                    borderRadius: 6
+                },
+                {
+                    label: 'Afkir',
+                    data: {!! json_encode($kematianAfkir ?? []) !!},
+                    backgroundColor: 'rgba(255, 193, 7, 0.75)',
+                    borderRadius: 6
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'bottom' } },
+            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+    });
 </script>
-
 @endpush
 
 
@@ -4153,260 +3592,109 @@ footer{background:var(--coklat-900);color:#cbb5a8}
 @section('title', 'Laporan Man Power')
 
 @section('content')
-
 <div class="mb-4">
-
-    <h3 class="fw-bold mb-1">
-        Laporan Harian Man Power
-    </h3>
-
-    <p class="text-muted mb-0">
-        Data laporan yang dimasukkan oleh seluruh man power.
-    </p>
-
+    <h3 class="fw-bold mb-1">Laporan Harian Man Power</h3>
+    <p class="text-muted mb-0">Data laporan yang dimasukkan oleh seluruh man power.</p>
 </div>
-
 
 <!-- FILTER -->
-
 <div class="panel mb-4">
-
     <form method="GET">
-
         <div class="row g-3 align-items-end">
-
             <div class="col-md-4">
-
-                <label class="form-label">
-                    Tanggal
-                </label>
-
-                <input
-                    type="date"
-                    name="tanggal"
-                    class="form-control"
-                    value="{{ request('tanggal') }}"
-                >
-
+                <label class="form-label">Tanggal</label>
+                <input type="date" name="tanggal" class="form-control" value="{{ request('tanggal') }}">
             </div>
-
-
             <div class="col-md-4">
-
-                <label class="form-label">
-                    Kandang
-                </label>
-
-                <select
-                    name="kandang_id"
-                    class="form-select"
-                >
-
-                    <option value="">
-                        Semua Kandang
-                    </option>
-
+                <label class="form-label">Kandang</label>
+                <select name="kandang_id" class="form-select">
+                    <option value="">Semua Kandang</option>
                     @foreach($kandangs as $kandang)
-
-                        <option
-                            value="{{ $kandang->id }}"
-                            {{ request('kandang_id') == $kandang->id ? 'selected' : '' }}
-                        >
+                        <option value="{{ $kandang->id }}" {{ request('kandang_id') == $kandang->id ? 'selected' : '' }}>
                             {{ $kandang->nama }}
                         </option>
-
                     @endforeach
-
                 </select>
-
             </div>
-
-
             <div class="col-md-4">
-
-                <button
-                    type="submit"
-                    class="btn btn-primary"
-                >
-                    <i class="bi bi-search me-1"></i>
-                    Filter
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-search me-1"></i> Filter
                 </button>
-
-                <a
-                    href="{{ route('admin.laporan.index') }}"
-                    class="btn btn-light"
-                >
-                    Reset
-                </a>
-
+                <a href="{{ route('admin.laporan.index') }}" class="btn btn-light">Reset</a>
             </div>
-
         </div>
-
     </form>
-
 </div>
-
 
 <!-- TABLE -->
-
 <div class="panel">
-
     <div class="panel-header">
-
         <div>
-
-            <div class="panel-title">
-                Data Laporan
-            </div>
-
-            <div class="text-muted small">
-                Total {{ $laporan->total() }} laporan
-            </div>
-
+            <div class="panel-title">Data Laporan</div>
+            <div class="text-muted small">Total {{ $laporan->total() }} laporan</div>
         </div>
-
     </div>
-
 
     <div class="table-responsive">
-
         <table class="table table-hover">
-
             <thead>
-
                 <tr>
-
-                    <th>
-                        Tanggal
-                    </th>
-
-                    <th>
-                        Kandang
-                    </th>
-
-                    <th>
-                        Umur
-                    </th>
-
-                    <th>
-                        Hidup
-                    </th>
-
-                    <th>
-                        Mati
-                    </th>
-
-                    <th>
-                        Afkir
-                    </th>
-
-                    <th>
-                        Sisa
-                    </th>
-
-                    <th>
-                        Produksi
-                    </th>
-
-                    <th>
-                        Pecah
-                    </th>
-
-                    <th>
-                        Man Power
-                    </th>
-
+                    <th>Tanggal</th>
+                    <th>Kandang</th>
+                    <th>Umur</th>
+                    <th>Hidup</th>
+                    <th>Mati</th>
+                    <th>Afkir</th>
+                    <th>Sisa</th>
+                    <th>Pakan (kg)</th>
+                    <th>Produksi</th>
+                    <th>Pecah</th>
+                    <th>Catatan</th>
+                    <th>Man Power</th>
                 </tr>
-
             </thead>
-
-
             <tbody>
-
-            @forelse($laporan as $data)
-
+                @forelse($laporan as $data)
                 <tr>
-
+                    <td>{{ $data->tanggal->format('d/m/Y') }}</td>
                     <td>
-                        {{ $data->tanggal->format('d/m/Y') }}
+                        <span class="badge bg-success">{{ $data->kandang->nama ?? '-' }}</span>
                     </td>
-
+                    <td>{{ $data->umur_minggu }} minggu</td>
+                    <td>{{ number_format($data->hidup) }}</td>
+                    <td>{{ number_format($data->mati) }}</td>
+                    <td>{{ number_format($data->afkir) }}</td>
+                    <td class="fw-bold">{{ number_format($data->sisa_ayam) }}</td>
+                    <td>{{ number_format($data->total_pakan, 2) }}</td>
+                    <td class="fw-bold">{{ number_format($data->produksi_telur) }}</td>
+                    <td>{{ number_format($data->telur_pecah) }}</td>
                     <td>
-
-                        <span class="badge bg-success">
-                            {{ $data->kandang->nama ?? '-' }}
-                        </span>
-
+                        @if($data->column_10)
+                            <span title="{{ $data->column_10 }}">
+                                {{ \Illuminate\Support\Str::limit($data->column_10, 25) }}
+                            </span>
+                        @else
+                            <span class="text-muted">-</span>
+                        @endif
                     </td>
-
-                    <td>
-                        {{ $data->umur_minggu }} minggu
-                    </td>
-
-                    <td>
-                        {{ number_format($data->hidup) }}
-                    </td>
-
-                    <td>
-                        {{ number_format($data->mati) }}
-                    </td>
-
-                    <td>
-                        {{ number_format($data->afkir) }}
-                    </td>
-
-                    <td class="fw-bold">
-                        {{ number_format($data->sisa_ayam) }}
-                    </td>
-
-                    <td class="fw-bold">
-                        {{ number_format($data->produksi_telur) }}
-                    </td>
-
-                    <td>
-                        {{ number_format($data->telur_pecah) }}
-                    </td>
-
-                    <td>
-                        {{ $data->user->name ?? '-' }}
-                    </td>
-
+                    <td>{{ $data->user->name ?? '-' }}</td>
                 </tr>
-
-            @empty
-
+                @empty
                 <tr>
-
-                    <td
-                        colspan="10"
-                        class="text-center py-5 text-muted"
-                    >
+                    <td colspan="12" class="text-center py-5 text-muted">
                         <i class="bi bi-inbox fs-2 d-block mb-2"></i>
-
                         Belum ada laporan.
-
                     </td>
-
                 </tr>
-
-            @endforelse
-
+                @endforelse
             </tbody>
-
         </table>
-
     </div>
-
 
     <div class="mt-3">
-
         {{ $laporan->links() }}
-
     </div>
-
 </div>
-
 @endsection
 
 
@@ -5290,6 +4578,102 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 @stack('scripts')
+{{-- ===== FLOATING LAPORAN HARIAN (khusus admin) ===== --}}
+@if ($isAdmin)
+@php
+    $laporanFloating = \App\Models\LaporanHarian::with('kandang')
+        ->latest('tanggal')->latest('id')->limit(12)->get();
+    $laporanHariIni = \App\Models\LaporanHarian::whereDate('tanggal', today())->count();
+@endphp
+
+<style>
+.btn-float-laporan {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 1040;
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    font-size: 22px;
+    box-shadow: 0 8px 20px rgba(45,27,22,.35);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .2s ease, background .2s ease;
+}
+.btn-float-laporan:hover { transform: translateY(-3px); background: var(--primary-dark); }
+.btn-float-laporan .badge-count {
+    position: absolute; top: -4px; right: -4px;
+    background: #d93636; color: #fff;
+    font-size: 10px; font-weight: 700;
+    border-radius: 999px; padding: 3px 6px;
+}
+#laporanDrawer { --bs-offcanvas-width: 380px; }
+.laporan-item { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; background: #fff; }
+.laporan-item .head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+.laporan-item .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; text-align: center; }
+.laporan-item .grid .v { font-weight: 700; font-size: 13px; }
+.laporan-item .grid .l { font-size: 10px; color: var(--muted); }
+</style>
+
+{{-- Tombol melayang --}}
+<button class="btn-float-laporan" type="button" data-bs-toggle="offcanvas"
+        data-bs-target="#laporanDrawer" aria-controls="laporanDrawer"
+        title="Lihat laporan harian terbaru">
+    <i class="bi bi-clipboard2-data-fill"></i>
+    @if($laporanHariIni > 0)
+        <span class="badge-count">{{ $laporanHariIni }}</span>
+    @endif
+</button>
+
+{{-- Panel samping melayang --}}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="laporanDrawer" aria-labelledby="laporanDrawerLabel">
+    <div class="offcanvas-header" style="background: var(--sidebar); color:#fff;">
+        <h5 class="offcanvas-title fw-bold" id="laporanDrawerLabel">
+            <i class="bi bi-clipboard2-data-fill me-2"></i>Laporan Harian Terbaru
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <p class="small text-muted mt-1 mb-3">
+            Panel ini bisa dibuka sambil input data di halaman mana pun.
+        </p>
+
+        @forelse($laporanFloating as $lap)
+            <div class="laporan-item">
+                <div class="head">
+                    <span>{{ $lap->tanggal->format('d/m/Y') }}</span>
+                    <span class="badge" style="background:var(--primary);color:#fff;">
+                        {{ $lap->kandang->nama ?? '-' }}
+                    </span>
+                </div>
+                <div class="grid">
+                    <div><div class="v">{{ number_format($lap->hidup) }}</div><div class="l">Hidup</div></div>
+                    <div><div class="v text-danger">{{ number_format($lap->mati) }}</div><div class="l">Mati</div></div>
+                    <div><div class="v text-warning">{{ number_format($lap->afkir) }}</div><div class="l">Afkir</div></div>
+                    <div><div class="v text-success">{{ number_format($lap->sisa_ayam) }}</div><div class="l">Sisa</div></div>
+                </div>
+                <div class="grid mt-1">
+                    <div><div class="v">{{ number_format($lap->total_pakan, 0) }}</div><div class="l">Pakan (kg)</div></div>
+                    <div><div class="v">{{ number_format($lap->produksi_telur) }}</div><div class="l">Telur</div></div>
+                    <div><div class="v">{{ number_format($lap->telur_pecah) }}</div><div class="l">Pecah</div></div>
+                    <div><div class="v">{{ $lap->umur_minggu }}</div><div class="l">Minggu</div></div>
+                </div>
+            </div>
+        @empty
+            <div class="text-center text-muted small py-4">
+                <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                Belum ada laporan harian.
+            </div>
+        @endforelse
+
+        <a href="{{ route('admin.laporan.index') }}" class="btn btn-sm btn-primary w-100">
+            Lihat Semua Laporan
+        </a>
+    </div>
+</div>
+@endif
 @include('partials.cursor-animation')
 </body>
 </html>
@@ -5792,6 +5176,56 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
 @endsection
 
 
+===== C:\xampp\htdocs\peternakan_ayam\resources\views\pakan_kandang\export-excel.blade.php =====
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Laporan Pakan</title>
+</head>
+<body>
+    <h2>Laporan Pakan — BukanAyam</h2>
+    <p>Desa Tanjung Agung — Dicetak: {{ now()->format('d/m/Y H:i') }}</p>
+
+    <table border="1">
+        <thead>
+            <tr>
+                <th rowspan="2">No</th>
+                <th rowspan="2">Tanggal</th>
+                <th rowspan="2">Total Masuk (zak)</th>
+                <th colspan="{{ max($kandangs->count(), 1) }}">Keluar (Kg)</th>
+                <th rowspan="2">Sisa (zak)</th>
+                <th rowspan="2">Sisa (Kg)</th>
+            </tr>
+            <tr>
+                @foreach ($kandangs as $kandang)
+                    <th>{{ $kandang->nama }}</th>
+                @endforeach
+            </tr>
+        </thead>
+        <tbody>
+            @forelse ($laporan as $i => $row)
+                <tr>
+                    <td>{{ $i + 1 }}</td>
+                    <td>{{ \Illuminate\Support\Carbon::parse($row['tanggal'])->format('d/m/Y') }}</td>
+                    <td>{{ $row['total_masuk'] + 0 }}</td>
+                    @foreach ($kandangs as $kandang)
+                        <td>{{ ($row['keluar'][$kandang->id] ?? 0) + 0 }}</td>
+                    @endforeach
+                    <td>{{ round($row['sisa_zak'], 1) }}</td>
+                    <td>{{ round($row['sisa_kg'], 0) }}</td>
+                </tr>
+            @empty
+                <tr>
+                    <td colspan="{{ 6 + $kandangs->count() }}">Belum ada data pakan.</td>
+                </tr>
+            @endforelse
+        </tbody>
+    </table>
+</body>
+</html>
+
+
 ===== C:\xampp\htdocs\peternakan_ayam\resources\views\pakan_kandang\index.blade.php =====
 @extends('layouts.app')
 
@@ -5869,6 +5303,9 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-3">
     <a href="{{ route('pakan-kandang.index') }}" class="btn btn-secondary">Kembali</a>
+    <a href="{{ route('pakan.laporan.export') }}" class="btn btn-success">
+        <i class="bi bi-file-earmark-excel-fill me-1"></i> Export Excel
+    </a>
 </div>
 
 <div class="card">
@@ -6967,222 +6404,128 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
 
 ===== C:\xampp\htdocs\peternakan_ayam\resources\views\populasi\create.blade.php =====
 @extends('layouts.app')
-
 @section('title', 'Tambah Populasi')
-
 @section('content')
-
 <h2>Tambah Populasi</h2>
-
 <div class="card">
-    <div class="card-body">
-
-        <form action="{{ route('populasi.store') }}" method="POST">
-            @csrf
-
-            <div class="mb-3">
-                <label>Tanggal</label>
-                <input
-                    type="date"
-                    name="tanggal"
-                    class="form-control"
-                    value="{{ old('tanggal') }}"
-                    required
-                >
-            </div>
-
-            <div class="mb-3">
-                <label>Kandang</label>
-
-                <select name="kandang_id" class="form-select" required>
-                    <option value="">-- Pilih Kandang --</option>
-
-                    @foreach($kandangs as $kandang)
-                        <option
-                            value="{{ $kandang->id }}"
-                            @selected(old('kandang_id') == $kandang->id)
-                        >
-                            {{ $kandang->nama }}
-                        </option>
-                    @endforeach
-
-                </select>
-            </div>
-
-            <div class="row">
-
-                <div class="col-md-4 mb-3">
-                    <label>Hidup</label>
-                    <input
-                        type="number"
-                        name="hidup"
-                        class="form-control"
-                        value="{{ old('hidup', 0) }}"
-                        min="0"
-                        required
-                    >
-                </div>
-
-                <div class="col-md-4 mb-3">
-                    <label>Mati</label>
-                    <input
-                        type="number"
-                        name="mati"
-                        class="form-control"
-                        value="{{ old('mati', 0) }}"
-                        min="0"
-                        required
-                    >
-                </div>
-
-                <div class="col-md-4 mb-3">
-                    <label>Afkir</label>
-                    <input
-                        type="number"
-                        name="afkir"
-                        class="form-control"
-                        value="{{ old('afkir', 0) }}"
-                        min="0"
-                        required
-                    >
-                </div>
-
-                <div class="col-md-6 mb-3">
-                    <label>Sisa</label>
-                    <input
-                        type="number"
-                        name="sisa"
-                        class="form-control"
-                        value="{{ old('sisa', 0) }}"
-                        min="0"
-                        required
-                    >
-                </div>
-
-                <div class="col-md-6 mb-3">
-                    <label>Usia (hari)</label>
-                    <input
-                        type="number"
-                        name="usia"
-                        class="form-control"
-                        value="{{ old('usia', 0) }}"
-                        min="0"
-                        required
-                    >
-                </div>
-
-            </div>
-
-            <button class="btn btn-primary">Simpan</button>
-
-            <a
-                href="{{ route('populasi.index') }}"
-                class="btn btn-secondary"
-            >
-                Kembali
-            </a>
-
-        </form>
-
+<div class="card-body">
+<form action="{{ route('populasi.store') }}" method="POST">
+@csrf
+<div class="mb-3">
+    <label>Tanggal</label>
+    <input type="date" name="tanggal" class="form-control" value="{{ old('tanggal') }}" required>
+</div>
+<div class="mb-3">
+    <label>Kandang</label>
+    <select name="kandang_id" class="form-select" required>
+        <option value="">-- Pilih Kandang --</option>
+        @foreach($kandangs as $kandang)
+        <option value="{{ $kandang->id }}" @selected(old('kandang_id') == $kandang->id)>{{ $kandang->nama }}</option>
+        @endforeach
+    </select>
+</div>
+<div class="row">
+    <div class="col-md-4 mb-3">
+        <label>Hidup</label>
+        <input type="number" name="hidup" class="form-control" value="{{ old('hidup', 0) }}" min="0" required>
+    </div>
+    <div class="col-md-4 mb-3">
+        <label>Mati</label>
+        <input type="number" name="mati" class="form-control" value="{{ old('mati', 0) }}" min="0" required>
+    </div>
+    <div class="col-md-4 mb-3">
+        <label>Afkir</label>
+        <input type="number" name="afkir" class="form-control" value="{{ old('afkir', 0) }}" min="0" required>
+    </div>
+    <div class="col-md-6 mb-3">
+        <label>Sisa (otomatis)</label>
+        <input type="number" id="sisa" name="sisa" class="form-control" readonly value="{{ old('sisa', 0) }}">
+        <div class="form-text">Sisa = Hidup − Mati − Afkir (dihitung otomatis)</div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <label>Usia (hari)</label>
+        <input type="number" name="usia" class="form-control" value="{{ old('usia', 0) }}" min="0" required>
     </div>
 </div>
-
+<button class="btn btn-primary">Simpan</button>
+<a href="{{ route('populasi.index') }}" class="btn btn-secondary">Kembali</a>
+</form>
+</div>
+</div>
+<script>
+function hitungSisa() {
+    const hidup = parseInt(document.querySelector('[name="hidup"]').value || 0, 10) || 0;
+    const mati  = parseInt(document.querySelector('[name="mati"]').value || 0, 10) || 0;
+    const afkir = parseInt(document.querySelector('[name="afkir"]').value || 0, 10) || 0;
+    document.getElementById('sisa').value = Math.max(0, hidup - mati - afkir);
+}
+['hidup', 'mati', 'afkir'].forEach(n =>
+    document.querySelector('[name="' + n + '"]').addEventListener('input', hitungSisa));
+hitungSisa();
+</script>
 @endsection
 
 
 ===== C:\xampp\htdocs\peternakan_ayam\resources\views\populasi\edit.blade.php =====
 @extends('layouts.app')
-
 @section('title', 'Edit Populasi')
-
 @section('content')
-
 <div class="card">
-    <div class="card-body">
-
-        <form
-            action="{{ route('populasi.update', $populasi) }}"
-            method="POST"
-        >
-            @csrf
-            @method('PUT')
-
-            <div class="mb-3">
-                <label>Tanggal</label>
-
-                <input
-                    type="date"
-                    name="tanggal"
-                    class="form-control"
-                    value="{{ old('tanggal', $populasi->tanggal->format('Y-m-d')) }}"
-                    required
-                >
-            </div>
-
-            <div class="mb-3">
-                <label>Kandang</label>
-
-                <select name="kandang_id" class="form-select" required>
-
-                    @foreach($kandangs as $kandang)
-
-                        <option
-                            value="{{ $kandang->id }}"
-                            @selected($populasi->kandang_id == $kandang->id)
-                        >
-                            {{ $kandang->nama }}
-                        </option>
-
-                    @endforeach
-
-                </select>
-            </div>
-
-            <div class="row">
-
-                @foreach([
-                    'hidup' => 'Hidup',
-                    'mati' => 'Mati',
-                    'afkir' => 'Afkir',
-                    'sisa' => 'Sisa',
-                    'usia' => 'Usia (hari)'
-                ] as $field => $label)
-
-                    <div class="col-md-4 mb-3">
-
-                        <label>{{ $label }}</label>
-
-                        <input
-                            type="number"
-                            name="{{ $field }}"
-                            class="form-control"
-                            value="{{ old($field, $populasi->$field) }}"
-                            min="0"
-                            required
-                        >
-
-                    </div>
-
-                @endforeach
-
-            </div>
-
-            <button class="btn btn-primary">
-                Update
-            </button>
-
-            <a
-                href="{{ route('populasi.index') }}"
-                class="btn btn-secondary"
-            >
-                Kembali
-            </a>
-
-        </form>
-
+<div class="card-body">
+<form action="{{ route('populasi.update', $populasi) }}" method="POST">
+@csrf
+@method('PUT')
+<div class="mb-3">
+    <label>Tanggal</label>
+    <input type="date" name="tanggal" class="form-control" value="{{ old('tanggal', $populasi->tanggal->format('Y-m-d')) }}" required>
+</div>
+<div class="mb-3">
+    <label>Kandang</label>
+    <select name="kandang_id" class="form-select" required>
+        @foreach($kandangs as $kandang)
+        <option value="{{ $kandang->id }}" @selected($populasi->kandang_id == $kandang->id)>{{ $kandang->nama }}</option>
+        @endforeach
+    </select>
+</div>
+<div class="row">
+    <div class="col-md-4 mb-3">
+        <label>Hidup</label>
+        <input type="number" name="hidup" class="form-control" value="{{ old('hidup', $populasi->hidup) }}" min="0" required>
+    </div>
+    <div class="col-md-4 mb-3">
+        <label>Mati</label>
+        <input type="number" name="mati" class="form-control" value="{{ old('mati', $populasi->mati) }}" min="0" required>
+    </div>
+    <div class="col-md-4 mb-3">
+        <label>Afkir</label>
+        <input type="number" name="afkir" class="form-control" value="{{ old('afkir', $populasi->afkir) }}" min="0" required>
+    </div>
+    <div class="col-md-6 mb-3">
+        <label>Sisa (otomatis)</label>
+        <input type="number" id="sisa" name="sisa" class="form-control" readonly value="{{ old('sisa', $populasi->sisa) }}">
+        <div class="form-text">Sisa = Hidup − Mati − Afkir (dihitung otomatis)</div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <label>Usia (hari)</label>
+        <input type="number" name="usia" class="form-control" value="{{ old('usia', $populasi->usia) }}" min="0" required>
     </div>
 </div>
-
+<button class="btn btn-primary">Update</button>
+<a href="{{ route('populasi.index') }}" class="btn btn-secondary">Kembali</a>
+</form>
+</div>
+</div>
+<script>
+function hitungSisa() {
+    const hidup = parseInt(document.querySelector('[name="hidup"]').value || 0, 10) || 0;
+    const mati  = parseInt(document.querySelector('[name="mati"]').value || 0, 10) || 0;
+    const afkir = parseInt(document.querySelector('[name="afkir"]').value || 0, 10) || 0;
+    document.getElementById('sisa').value = Math.max(0, hidup - mati - afkir);
+}
+['hidup', 'mati', 'afkir'].forEach(n =>
+    document.querySelector('[name="' + n + '"]').addEventListener('input', hitungSisa));
+hitungSisa();
+</script>
 @endsection
 
 
@@ -7364,137 +6707,100 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
 @section('title', 'Tambah Produksi Telur')
 
 @section('content')
-
-<h2>Tambah Produksi Telur</h2>
+<h2 class="mb-3">Tambah Produksi Telur</h2>
 
 <div class="card">
     <div class="card-body">
-
-        <form
-            action="{{ route('produksi-telur.store') }}"
-            method="POST"
-        >
+        <form action="{{ route('produksi-telur.store') }}" method="POST">
             @csrf
-
             <div class="row">
-
                 <div class="col-md-6 mb-3">
-                    <label>Tanggal</label>
-
-                    <input
-                        type="date"
-                        name="tanggal"
-                        class="form-control"
-                        value="{{ old('tanggal') }}"
-                        required
-                    >
+                    <label class="form-label">Tanggal</label>
+                    <input type="date" name="tanggal" class="form-control"
+                        value="{{ old('tanggal', date('Y-m-d')) }}" required>
                 </div>
-
                 <div class="col-md-6 mb-3">
-
-                    <label>Kandang</label>
-
-                    <select
-                        name="kandang_id"
-                        class="form-select"
-                        required
-                    >
-                        <option value="">
-                            -- Pilih Kandang --
-                        </option>
-
-                        @foreach($kandangs as $kandang)
-
-                            <option
-                                value="{{ $kandang->id }}"
-                                @selected(old('kandang_id') == $kandang->id)
-                            >
+                    <label class="form-label">Kandang</label>
+                    <select name="kandang_id" class="form-select" required>
+                        <option value="">-- Pilih Kandang --</option>
+                        @foreach ($kandangs as $kandang)
+                            <option value="{{ $kandang->id }}" @selected(old('kandang_id') == $kandang->id)>
                                 {{ $kandang->nama }}
                             </option>
-
                         @endforeach
-
                     </select>
-
                 </div>
 
                 <div class="col-md-6 mb-3">
-
-                    <label>Populasi</label>
-
-                    <select
-                        name="populasi_id"
-                        class="form-select"
-                        required
-                    >
-
-                        <option value="">
-                            -- Pilih Populasi --
-                        </option>
-
-                        @foreach($populasis as $populasi)
-
-                            <option
-                                value="{{ $populasi->id }}"
-                                @selected(old('populasi_id') == $populasi->id)
-                            >
-                                {{ $populasi->tanggal->format('d-m-Y') }}
-                                -
-                                {{ $populasi->kandang->nama ?? '-' }}
+                    <label class="form-label">Populasi</label>
+                    <select name="populasi_id" id="populasi_id" class="form-select" required>
+                        <option value="">-- Pilih Populasi --</option>
+                        @foreach ($populisis as $populasi)
+                            <option value="{{ $populasi->id }}" @selected(old('populasi_id') == $populasi->id)>
+                                {{ $populasi->tanggal->format('d-m-Y') }} - {{ $populasi->kandang->nama ?? '-' }} (sisa {{ $populasi->sisa }})
                             </option>
-
                         @endforeach
-
                     </select>
-
                 </div>
 
-                @foreach([
-                    'jumlah_produksi' => 'Jumlah Produksi',
-                    'presentase' => 'Persentase (%)',
-                    'mati' => 'Mati',
-                    'afkir' => 'Afkir',
-                    'sisa_ayam' => 'Sisa Ayam',
-                    'telur_bagus' => 'Telur Bagus',
-                    'telur_reject' => 'Telur Reject'
-                ] as $field => $label)
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Sisa Ayam (otomatis)</label>
+                    <input type="text" id="info-sisa" class="form-control bg-light" readonly value="-">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Persentase (otomatis)</label>
+                    <input type="text" id="info-persentase" class="form-control bg-light" readonly value="-">
+                    <div class="form-text">= produksi ÷ populasi × 100</div>
+                </div>
 
-                    <div class="col-md-4 mb-3">
-
-                        <label>{{ $label }}</label>
-
-                        <input
-                            type="number"
-                            name="{{ $field }}"
-                            class="form-control"
-                            value="{{ old($field, 0) }}"
-                            min="0"
-                            step="{{ $field === 'presentase' ? '0.01' : '1' }}"
-                            required
-                        >
-
-                    </div>
-
-                @endforeach
-
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Jumlah Produksi (butir)</label>
+                    <input type="number" name="jumlah_produksi" id="jumlah_produksi"
+                        class="form-control" value="{{ old('jumlah_produksi', 0) }}" min="0" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Telur Bagus (butir)</label>
+                    <input type="number" name="telur_bagus" class="form-control"
+                        value="{{ old('telur_bagus', 0) }}" min="0" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Telur Reject (butir)</label>
+                    <input type="number" name="telur_reject" class="form-control"
+                        value="{{ old('telur_reject', 0) }}" min="0" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Mati (ekor)</label>
+                    <input type="number" name="mati" class="form-control" value="{{ old('mati', 0) }}" min="0" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Afkir (ekor)</label>
+                    <input type="number" name="afkir" class="form-control" value="{{ old('afkir', 0) }}" min="0" required>
+                </div>
             </div>
-
-            <button class="btn btn-primary">
-                Simpan
-            </button>
-
-            <a
-                href="{{ route('produksi-telur.index') }}"
-                class="btn btn-secondary"
-            >
-                Kembali
-            </a>
-
+            <button class="btn btn-primary">Simpan</button>
+            <a href="{{ route('produksi-telur.index') }}" class="btn btn-secondary">Kembali</a>
         </form>
-
     </div>
 </div>
 
+<script>
+    const SISA = @js($sisaPopulasi);
+
+    function hitung() {
+        const popId    = document.getElementById('populasi_id').value;
+        const populasi = SISA[popId] ?? 0;
+        const produksi = parseInt(document.getElementById('jumlah_produksi').value || 0, 10) || 0;
+
+        document.getElementById('info-sisa').value =
+            populasi > 0 ? populasi.toLocaleString('id-ID') + ' ekor' : '-';
+        document.getElementById('info-persentase').value =
+            populasi > 0 ? (produksi / populasi * 100).toFixed(2) + ' %' : '-';
+    }
+
+    document.getElementById('populasi_id').addEventListener('change', hitung);
+    document.getElementById('jumlah_produksi').addEventListener('input', hitung);
+    hitung();
+</script>
 @endsection
 
 
@@ -7504,117 +6810,100 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
 @section('title', 'Edit Produksi Telur')
 
 @section('content')
+<h2 class="mb-3">Edit Produksi Telur</h2>
 
 <div class="card">
-<div class="card-body">
+    <div class="card-body">
+        <form action="{{ route('produksi-telur.update', $produksiTelur) }}" method="POST">
+            @csrf
+            @method('PUT')
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Tanggal</label>
+                    <input type="date" name="tanggal" class="form-control"
+                        value="{{ old('tanggal', $produksiTelur->tanggal->format('Y-m-d')) }}" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Kandang</label>
+                    <select name="kandang_id" class="form-select" required>
+                        @foreach ($kandangs as $kandang)
+                            <option value="{{ $kandang->id }}" @selected(old('kandang_id', $produksiTelur->kandang_id) == $kandang->id)>
+                                {{ $kandang->nama }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
 
-<form
-    action="{{ route('produksi-telur.update', $produksiTelur) }}"
-    method="POST"
->
-    @csrf
-    @method('PUT')
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Populasi</label>
+                    <select name="populasi_id" id="populasi_id" class="form-select" required>
+                        @foreach ($populisis as $populasi)
+                            <option value="{{ $populasi->id }}" @selected(old('populasi_id', $produksiTelur->populasi_id) == $populasi->id)>
+                                {{ $populasi->tanggal->format('d-m-Y') }} - {{ $populasi->kandang->nama ?? '-' }} (sisa {{ $populasi->sisa }})
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
 
-    <div class="row">
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Sisa Ayam (otomatis)</label>
+                    <input type="text" id="info-sisa" class="form-control bg-light" readonly value="-">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Persentase (otomatis)</label>
+                    <input type="text" id="info-persentase" class="form-control bg-light" readonly value="-">
+                </div>
 
-        <div class="col-md-6 mb-3">
-            <label>Tanggal</label>
-
-            <input
-                type="date"
-                name="tanggal"
-                class="form-control"
-                value="{{ old('tanggal', $produksiTelur->tanggal->format('Y-m-d')) }}"
-                required
-            >
-        </div>
-
-        <div class="col-md-6 mb-3">
-            <label>Kandang</label>
-
-            <select name="kandang_id" class="form-select" required>
-
-                @foreach($kandangs as $kandang)
-
-                    <option
-                        value="{{ $kandang->id }}"
-                        @selected($produksiTelur->kandang_id == $kandang->id)
-                    >
-                        {{ $kandang->nama }}
-                    </option>
-
-                @endforeach
-
-            </select>
-        </div>
-
-        <div class="col-md-6 mb-3">
-            <label>Populasi</label>
-
-            <select name="populasi_id" class="form-select" required>
-
-                @foreach($populasis as $populasi)
-
-                    <option
-                        value="{{ $populasi->id }}"
-                        @selected($produksiTelur->populasi_id == $populasi->id)
-                    >
-                        {{ $populasi->tanggal->format('d-m-Y') }}
-                        -
-                        {{ $populasi->kandang->nama ?? '-' }}
-                    </option>
-
-                @endforeach
-
-            </select>
-        </div>
-
-        @foreach([
-            'jumlah_produksi' => 'Jumlah Produksi',
-            'presentase' => 'Persentase (%)',
-            'mati' => 'Mati',
-            'afkir' => 'Afkir',
-            'sisa_ayam' => 'Sisa Ayam',
-            'telur_bagus' => 'Telur Bagus',
-            'telur_reject' => 'Telur Reject'
-        ] as $field => $label)
-
-            <div class="col-md-4 mb-3">
-
-                <label>{{ $label }}</label>
-
-                <input
-                    type="number"
-                    name="{{ $field }}"
-                    class="form-control"
-                    value="{{ old($field, $produksiTelur->$field) }}"
-                    min="0"
-                    step="{{ $field === 'presentase' ? '0.01' : '1' }}"
-                    required
-                >
-
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Jumlah Produksi (butir)</label>
+                    <input type="number" name="jumlah_produksi" id="jumlah_produksi" class="form-control"
+                        value="{{ old('jumlah_produksi', $produksiTelur->jumlah_produksi) }}" min="0" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Telur Bagus (butir)</label>
+                    <input type="number" name="telur_bagus" class="form-control"
+                        value="{{ old('telur_bagus', $produksiTelur->telur_bagus) }}" min="0" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Telur Reject (butir)</label>
+                    <input type="number" name="telur_reject" class="form-control"
+                        value="{{ old('telur_reject', $produksiTelur->telur_reject) }}" min="0" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Mati (ekor)</label>
+                    <input type="number" name="mati" class="form-control"
+                        value="{{ old('mati', $produksiTelur->mati) }}" min="0" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Afkir (ekor)</label>
+                    <input type="number" name="afkir" class="form-control"
+                        value="{{ old('afkir', $produksiTelur->afkir) }}" min="0" required>
+                </div>
             </div>
-
-        @endforeach
-
+            <button class="btn btn-primary">Update</button>
+            <a href="{{ route('produksi-telur.index') }}" class="btn btn-secondary">Kembali</a>
+        </form>
     </div>
-
-    <button class="btn btn-primary">
-        Update
-    </button>
-
-    <a
-        href="{{ route('produksi-telur.index') }}"
-        class="btn btn-secondary"
-    >
-        Kembali
-    </a>
-
-</form>
-
-</div>
 </div>
 
+<script>
+    const SISA = @js($sisaPopulasi);
+
+    function hitung() {
+        const popId    = document.getElementById('populasi_id').value;
+        const populasi = SISA[popId] ?? 0;
+        const produksi = parseInt(document.getElementById('jumlah_produksi').value || 0, 10) || 0;
+
+        document.getElementById('info-sisa').value =
+            populasi > 0 ? populasi.toLocaleString('id-ID') + ' ekor' : '-';
+        document.getElementById('info-persentase').value =
+            populasi > 0 ? (produksi / populasi * 100).toFixed(2) + ' %' : '-';
+    }
+
+    document.getElementById('populasi_id').addEventListener('change', hitung);
+    document.getElementById('jumlah_produksi').addEventListener('input', hitung);
+    hitung();
+</script>
 @endsection
 
 
@@ -7624,120 +6913,80 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
 @section('title', 'Produksi Telur')
 
 @section('content')
-
-<div class="d-flex justify-content-between mb-3">
-
-    <a
-        href="{{ route('produksi-telur.create') }}"
-        class="btn btn-primary"
-    >
-        + Tambah Produksi
-    </a>
-
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">Laporan Produksi Telur</h2>
+    <a href="{{ route('produksi-telur.create') }}" class="btn btn-primary">+ Tambah Produksi</a>
 </div>
 
 <div class="card">
     <div class="card-body">
-
-        <table class="table table-bordered table-striped">
-
-            <thead>
-                <tr>
-                    <th>Tanggal</th>
-                    <th>Kandang</th>
-                    <th>Produksi</th>
-                    <th>Persentase</th>
-                    <th>Mati</th>
-                    <th>Afkir</th>
-                    <th>Telur Bagus</th>
-                    <th>Reject</th>
-                    <th>Aksi</th>
-                </tr>
-            </thead>
-
-            <tbody>
-
-                @forelse($produksis as $produksi)
-
+        <div class="table-responsive">
+            <table class="table table-bordered text-center align-middle">
+                <thead>
                     <tr>
-
-                        <td>
-                            {{ $produksi->tanggal->format('d-m-Y') }}
-                        </td>
-
-                        <td>
-                            {{ $produksi->kandang->nama ?? '-' }}
-                        </td>
-
-                        <td>
-                            {{ number_format($produksi->jumlah_produksi) }}
-                        </td>
-
-                        <td>
-                            {{ $produksi->presentase }}%
-                        </td>
-
-                        <td>{{ $produksi->mati }}</td>
-                        <td>{{ $produksi->afkir }}</td>
-
-                        <td>{{ $produksi->telur_bagus }}</td>
-
-                        <td>{{ $produksi->telur_reject }}</td>
-
-                        <td>
-
-                            <a
-                                href="{{ route('produksi-telur.show', $produksi) }}"
-                                class="btn btn-sm btn-info"
-                            >
-                                Detail
-                            </a>
-
-                            <a
-                                href="{{ route('produksi-telur.edit', $produksi) }}"
-                                class="btn btn-sm btn-warning"
-                            >
-                                Edit
-                            </a>
-
-                            <form
-                                action="{{ route('produksi-telur.destroy', $produksi) }}"
-                                method="POST"
-                                class="d-inline"
-                            >
-                                @csrf
-                                @method('DELETE')
-
-                                <button
-                                    class="btn btn-sm btn-danger"
-                                    onclick="return confirm('Hapus data produksi?')"
-                                >
-                                    Hapus
-                                </button>
-
-                            </form>
-
-                        </td>
-
+                        <th rowspan="2">Tanggal</th>
+                        @foreach ($kandangs as $kandang)
+                            <th colspan="3">{{ strtoupper($kandang->nama) }}</th>
+                        @endforeach
+                        <th rowspan="2">Total Populasi</th>
+                        <th colspan="2">KANDANG 1&{{ $kandangs->count() }}</th>
+                        <th rowspan="2">Aksi</th>
                     </tr>
-
-                @empty
-
                     <tr>
-                        <td colspan="9" class="text-center">
-                            Belum ada produksi telur.
-                        </td>
+                        @foreach ($kandangs as $kandang)
+                            <th>Populasi</th>
+                            <th>Jumlah produksi</th>
+                            <th>Persentase</th>
+                        @endforeach
+                        <th>Jumlah produksi</th>
+                        <th>Persentase</th>
                     </tr>
+                </thead>
+                <tbody>
+                    @forelse ($laporan as $row)
+                        <tr>
+                            <td>{{ \Illuminate\Support\Carbon::parse($row['tanggal'])->format('d/m/Y') }}</td>
 
-                @endforelse
+                            @foreach ($kandangs as $kandang)
+                                @php $c = $row['perKandang'][$kandang->id]; @endphp
+                                <td>{{ $c['populasi'] > 0 ? number_format($c['populasi']) : '-' }}</td>
+                                <td>{{ $c['produksi'] > 0 ? number_format($c['produksi']) : '-' }}</td>
+                                <td>{{ $c['populasi'] > 0 ? number_format($c['persentase'], 2) . '%' : '-' }}</td>
+                            @endforeach
 
-            </tbody>
+                            <td class="fw-bold">{{ number_format($row['totalPopulasi']) }}</td>
+                            <td class="fw-bold">{{ number_format($row['totalProduksi']) }}</td>
+                            <td class="fw-bold">{{ number_format($row['totalPersentase'], 2) }}%</td>
 
-        </table>
-
+                            <td>
+                                @foreach ($row['items'] as $item)
+                                    <div class="d-flex gap-1 justify-content-center mb-1">
+                                        <a href="{{ route('produksi-telur.edit', $item) }}"
+                                           class="btn btn-sm btn-warning">
+                                            Edit {{ $item->kandang->nama ?? '' }}
+                                        </a>
+                                        <form action="{{ route('produksi-telur.destroy', $item) }}" method="POST"
+                                              onsubmit="return confirm('Hapus data ini?')">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button class="btn btn-sm btn-danger">Hapus</button>
+                                        </form>
+                                    </div>
+                                @endforeach
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="{{ 5 + ($kandangs->count() * 3) }}" class="text-center py-4">
+                                Belum ada data produksi.
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
-
 @endsection
 
 

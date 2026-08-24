@@ -18,6 +18,7 @@
   --text: #33261f;
   --muted: #8a7a6e;
   --border: #e6dacc;
+  --drawer-width: 380px;
 }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background); color: var(--text); }
@@ -38,7 +39,12 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 .sidebar-footer { padding: 14px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 20px; }
 
 /* MAIN */
-.main { margin-left: 260px; min-height: 100vh; }
+.main {
+  margin-left: 260px;
+  min-height: 100vh;
+  transition: width 0.35s ease, padding-right 0.35s ease;
+  width: calc(100% - 260px);
+}
 .topbar { height: 75px; background: white; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 30px; }
 .page-title { font-size: 18px; font-weight: 700; }
 .page-subtitle { font-size: 12px; color: var(--muted); margin-top: 2px; }
@@ -47,6 +53,11 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 .btn-logout { background: transparent; border: 1px solid var(--border); color: #ffffff; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; transition: 0.2s; }
 .btn-logout:hover { background: #f8d7da; color: #842029; border-color: #f8d7da; }
 .content { padding: 30px; }
+
+/* Saat drawer terbuka → main menyempit dari kanan */
+.main.drawer-open {
+  width: calc(100% - 260px - var(--drawer-width));
+}
 
 /* CARDS */
 .stat-card { background: white; border: 1px solid var(--border); border-radius: 16px; padding: 20px; height: 100%; transition: 0.2s; }
@@ -72,7 +83,7 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 .table thead th { font-size: 12px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
 .table tbody td { font-size: 13px; border-color: #f0e9df; }
 
-/* BUTTON & BADGE (hijau → coklat) */
+/* BUTTON & BADGE */
 .btn-primary { background: var(--primary); border-color: var(--primary); }
 .btn-primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
 .btn-success { background: var(--primary); border-color: var(--primary); }
@@ -81,13 +92,54 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 
 @keyframes wobble { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); } }
 
+/* FLOATING BUTTON */
+.btn-float-laporan {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 1040;
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    font-size: 22px;
+    box-shadow: 0 8px 20px rgba(45,27,22,.35);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .2s ease, background .2s ease, right .35s ease;
+}
+.btn-float-laporan:hover { transform: translateY(-3px); background: var(--primary-dark); }
+.btn-float-laporan .badge-count {
+    position: absolute; top: -4px; right: -4px;
+    background: #d93636; color: #fff;
+    font-size: 10px; font-weight: 700;
+    border-radius: 999px; padding: 3px 6px;
+}
+/* Geser tombol ke kiri saat drawer terbuka */
+body.drawer-open .btn-float-laporan {
+    right: calc(var(--drawer-width) + 22px);
+}
+
+/* DRAWER (override offcanvas) */
+#laporanDrawer {
+    --bs-offcanvas-width: var(--drawer-width);
+    box-shadow: -8px 0 24px rgba(0,0,0,.18);
+    border-left: 1px solid var(--border);
+}
+.laporan-item { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; background: #fff; }
+.laporan-item .head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+.laporan-item .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; text-align: center; }
+.laporan-item .grid .v { font-weight: 700; font-size: 13px; }
+.laporan-item .grid .l { font-size: 10px; color: var(--muted); }
+
 /* MOBILE */
 @media (max-width: 991px) {
   .sidebar { transform: translateX(-100%); }
   .sidebar.show { transform: translateX(0); }
-  .main { margin-left: 0; }
+  .main { margin-left: 0; width: 100% !important; }
   .content { padding: 20px; }
   .topbar { padding: 0 20px; }
+  .main.drawer-open { width: 100% !important; }
 }
 </style>
 @stack('styles')
@@ -157,7 +209,7 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
     </div>
 </aside>
 
-<div class="main">
+<div class="main" id="mainArea">
     <header class="topbar">
         <div>
             <div class="page-title">@yield('title', 'Dashboard')</div>
@@ -196,6 +248,90 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 @stack('scripts')
+
+{{-- ===== FLOATING LAPORAN HARIAN (khusus admin) ===== --}}
+@if ($isAdmin)
+@php
+    $laporanFloating = \App\Models\LaporanHarian::with('kandang')
+        ->latest('tanggal')->latest('id')->limit(12)->get();
+    $laporanHariIni = \App\Models\LaporanHarian::whereDate('tanggal', today())->count();
+@endphp
+
+{{-- Tombol melayang --}}
+<button class="btn-float-laporan" type="button" data-bs-toggle="offcanvas"
+        data-bs-target="#laporanDrawer" aria-controls="laporanDrawer"
+        title="Lihat laporan harian terbaru">
+    <i class="bi bi-clipboard2-data-fill"></i>
+    @if($laporanHariIni > 0)
+        <span class="badge-count">{{ $laporanHariIni }}</span>
+    @endif
+</button>
+
+{{-- Panel berdampingan (tanpa backdrop, scroll aktif) --}}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="laporanDrawer"
+     aria-labelledby="laporanDrawerLabel"
+     data-bs-backdrop="false"
+     data-bs-scroll="true">
+    <div class="offcanvas-header" style="background: var(--sidebar); color:#fff;">
+        <h5 class="offcanvas-title fw-bold" id="laporanDrawerLabel">
+            <i class="bi bi-clipboard2-data-fill me-2"></i>Laporan Harian Terbaru
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+
+        @forelse($laporanFloating as $lap)
+            <div class="laporan-item">
+                <div class="head">
+                    <span>{{ $lap->tanggal->format('d/m/Y') }}</span>
+                    <span class="badge" style="background:var(--primary);color:#fff;">
+                        {{ $lap->kandang->nama ?? '-' }}
+                    </span>
+                </div>
+                <div class="grid">
+                    <div><div class="v">{{ number_format($lap->hidup) }}</div><div class="l">Hidup</div></div>
+                    <div><div class="v text-danger">{{ number_format($lap->mati) }}</div><div class="l">Mati</div></div>
+                    <div><div class="v text-warning">{{ number_format($lap->afkir) }}</div><div class="l">Afkir</div></div>
+                    <div><div class="v text-success">{{ number_format($lap->sisa_ayam) }}</div><div class="l">Sisa</div></div>
+                </div>
+                <div class="grid mt-1">
+                    <div><div class="v">{{ number_format($lap->total_pakan, 0) }}</div><div class="l">Pakan (kg)</div></div>
+                    <div><div class="v">{{ number_format($lap->produksi_telur) }}</div><div class="l">Telur</div></div>
+                    <div><div class="v">{{ number_format($lap->telur_pecah) }}</div><div class="l">Pecah</div></div>
+                    <div><div class="v">{{ $lap->umur_minggu }}</div><div class="l">Minggu</div></div>
+                </div>
+            </div>
+        @empty
+            <div class="text-center text-muted small py-4">
+                <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                Belum ada laporan harian.
+            </div>
+        @endforelse
+
+        <a href="{{ route('admin.laporan.index') }}" class="btn btn-sm btn-primary w-100">
+            Lihat Semua Laporan
+        </a>
+    </div>
+</div>
+
+<script>
+(function () {
+    const drawer = document.getElementById('laporanDrawer');
+    const mainArea = document.getElementById('mainArea');
+    if (!drawer || !mainArea) return;
+
+    drawer.addEventListener('show.bs.offcanvas', () => {
+        mainArea.classList.add('drawer-open');
+        document.body.classList.add('drawer-open');
+    });
+    drawer.addEventListener('hide.bs.offcanvas', () => {
+        mainArea.classList.remove('drawer-open');
+        document.body.classList.remove('drawer-open');
+    });
+})();
+</script>
+@endif
+
 @include('partials.cursor-animation')
 </body>
 </html>
