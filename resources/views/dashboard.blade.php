@@ -104,6 +104,40 @@
         </div>
     </div>
 </div>
+<!-- GRAFIK PENJUALAN (7 hari terakhir) -->
+<div class="row g-4 mb-4">
+    <div class="col-xl-8">
+        <div class="panel">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">Pendapatan Penjualan</div>
+                    <div class="text-muted small">Total penjualan telur 7 hari terakhir (Rp)</div>
+                </div>
+                <a href="{{ route('penjualan-telur.index') }}" class="panel-link">Lihat semua</a>
+            </div>
+            <canvas id="salesChart" height="110"></canvas>
+        </div>
+    </div>
+    <div class="col-xl-4">
+        <div class="stat-card h-100 d-flex flex-column justify-content-center">
+            <div class="stat-top">
+                <div>
+                    <div class="stat-label mt-0">Rata-rata / hari</div>
+                    @php
+                        $avgSales = count($penjualanData ?? [])
+                            ? round(collect($penjualanData)->avg())
+                            : 0;
+                    @endphp
+                    <div class="stat-value">Rp {{ number_format($avgSales, 0, ',', '.') }}</div>
+                </div>
+                <div class="stat-icon icon-green"><i class="bi bi-graph-up-arrow"></i></div>
+            </div>
+            <div class="stat-description mt-3">
+                Total 7 hari: <strong>Rp {{ number_format(collect($penjualanData ?? [])->sum(), 0, ',', '.') }}</strong>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- GRAFIK KEMATIAN -->
 <div class="row g-4 mb-4">
@@ -215,5 +249,39 @@
             scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
     });
+    new Chart(document.getElementById('salesChart'), {
+    type: 'bar',
+    data: {
+        labels: {!! json_encode($penjualanLabels ?? []) !!},
+        datasets: [{
+            label: 'Penjualan (Rp)',
+            data: {!! json_encode($penjualanData ?? []) !!},
+            backgroundColor: 'rgba(109, 76, 65, 0.8)',
+            borderColor: '#5d4037',
+            borderWidth: 1,
+            borderRadius: 8
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                callbacks: {
+                    label: ctx => 'Rp ' + Number(ctx.parsed.y).toLocaleString('id-ID')
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: v => 'Rp ' + (v/1000).toLocaleString('id-ID') + 'rb'
+                }
+            }
+        }
+    }
+});
+
 </script>
 @endpush

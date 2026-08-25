@@ -25,43 +25,38 @@ class LaporanHarianController extends Controller
         return view('admin.laporan.index', compact('kandangs', 'laporan'));
     }
 
-    /** MANPOWER: form laporan harian */
     public function create()
     {
         $kandangs = Kandang::orderBy('id')->get();
-
         $populasiTerakhir = [];
-
         foreach ($kandangs as $kandang) {
             $lastLaporan = LaporanHarian::where('kandang_id', $kandang->id)
-                ->orderByDesc('tanggal')
-                ->orderByDesc('id')
-                ->first();
+                ->orderByDesc('tanggal')->orderByDesc('id')->first();
+
+            $pop = Populasi::where('kandang_id', $kandang->id)
+                ->latest('tanggal')->first();
 
             if ($lastLaporan) {
-                // acuan dari laporan terakhir
                 $populasiTerakhir[$kandang->id] = [
-                    'sisa'    => (int) $lastLaporan->sisa_ayam,
-                    'tanggal' => $lastLaporan->tanggal->format('d/m/Y'),
+                    'sisa'          => (int) $lastLaporan->sisa_ayam,
+                    'tanggal'       => $lastLaporan->tanggal->format('d/m/Y'),
+                    'usia_dasar'    => $pop ? (int) $pop->usia : 0,
+                    'tanggal_dasar' => $pop ? $pop->tanggal->toDateString() : null,
                 ];
             } else {
-                $pop = Populasi::where('kandang_id', $kandang->id)
-                    ->orderByDesc('tanggal')
-                    ->first();
-
-                // PENTING: null = benar-benar belum ada data → field boleh diisi manual
-                $populasiTerakhir[$kandang->id] = $pop
-                    ? [
-                        'sisa'    => (int) $pop->sisa,
-                        'tanggal' => $pop->tanggal->format('d/m/Y'),
-                    ]
-                    : null;
+                $populasiTerakhir[$kandang->id] = $pop ? [
+                    'sisa'          => (int) $pop->sisa,
+                    'tanggal'       => $pop->tanggal->format('d/m/Y'),
+                    'usia_dasar'    => (int) $pop->usia,
+                    'tanggal_dasar' => $pop->tanggal->toDateString(),
+                ] : null;
             }
         }
 
         return view('manpower.create', [
             'kandangs'         => $kandangs,
             'populasiTerakhir' => $populasiTerakhir,
+            'today'            => now()->toDateString(),
         ]);
     }
 

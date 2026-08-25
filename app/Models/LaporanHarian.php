@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class LaporanHarian extends Model
 {
     protected $table = 'laporan_harian';
-
     protected $fillable = [
         'tanggal', 'kandang_id', 'user_id', 'umur_minggu',
         'hidup', 'mati', 'afkir', 'sisa_ayam',
@@ -72,8 +71,7 @@ class LaporanHarian extends Model
 
     /**
      * Hitung ulang rantai hidup & sisa mulai tanggal tertentu.
-     * Dipanggil setiap kali ada laporan yang ditambah / diubah / dihapus,
-     * supaya data selalu konsisten berantai.
+     * Sisa = hidup - mati (afkir TIDAK mengurangi sisa).
      */
     public static function hitungUlangRantai(int $kandangId, string $mulaiTanggal): void
     {
@@ -86,13 +84,11 @@ class LaporanHarian extends Model
         $sisaSebelum = static::baselineSebelum($kandangId, $mulaiTanggal);
 
         foreach ($rows as $row) {
-            // kalau tidak ada baseline sama sekali, pakai nilai hidup lama sebagai titik awal
             $hidup = $sisaSebelum ?? (int) $row->hidup;
-
             $row->hidup     = $hidup;
-            $row->sisa_ayam = max(0, $hidup - (int) $row->mati - (int) $row->afkir);
+            // ABAIKAN afkir: sisa = hidup - mati saja
+            $row->sisa_ayam = max(0, $hidup - (int) $row->mati);
             $row->save();
-
             $sisaSebelum = $row->sisa_ayam;
         }
     }

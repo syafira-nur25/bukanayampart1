@@ -7,101 +7,77 @@
 <h2>Edit Penjualan Telur</h2>
 
 <div class="card">
-<div class="card-body">
+    <div class="card-body">
+        <form action="{{ route('penjualan-telur.update', $penjualanTelur) }}" method="POST">
+            @csrf
+            @method('PUT')
 
-<form
-    action="{{ route('penjualan-telur.update', $penjualanTelur) }}"
-    method="POST"
->
-@csrf
-@method('PUT')
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label>Tanggal</label>
+                    <input type="date" name="tanggal" class="form-control"
+                        value="{{ old('tanggal', $penjualanTelur->tanggal->format('Y-m-d')) }}" required>
+                </div>
 
-<div class="row">
+                <div class="col-md-6 mb-3">
+                    <label>Customer</label>
+                    <input type="text" name="customer" class="form-control"
+                        value="{{ old('customer', $penjualanTelur->customer) }}" required>
+                </div>
 
-    <div class="col-md-6 mb-3">
-        <label>Tanggal</label>
+                <div class="col-md-6 mb-3">
+                    <label>Produksi Telur</label>
+                    <select name="produksi_id" class="form-select" required>
+                        <option value="">-- Pilih Produksi --</option>
+                        @foreach($produksis as $produksi)
+                            <option value="{{ $produksi->id }}"
+                                @selected(old('produksi_id', $penjualanTelur->produksi_id) == $produksi->id)>
+                                {{ $produksi->tanggal->format('d-m-Y') }} - {{ $produksi->kandang->nama ?? '-' }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
 
-        <input
-            type="date"
-            name="tanggal"
-            class="form-control"
-            value="{{ old('tanggal', $penjualanTelur->tanggal->format('Y-m-d')) }}"
-            required
-        >
+                <div class="col-md-4 mb-3">
+                    <label>Jumlah (ikat)</label>
+                    <input type="number" name="jumlah" id="jumlah" class="form-control"
+                        value="{{ old('jumlah', $penjualanTelur->jumlah) }}" min="1" required>
+                </div>
+
+                <div class="col-md-4 mb-3">
+                    <label>Harga per ikat (Rp)</label>
+                    <input type="number" name="harga" id="harga" class="form-control"
+                        value="{{ old('harga', $penjualanTelur->harga) }}" min="0" step="1" required>
+                </div>
+
+                <div class="col-md-4 mb-3">
+                    <label>Total (Rp)</label>
+                    <input type="text" id="total-display" class="form-control bg-light fw-bold" readonly value="Rp 0">
+                    <input type="hidden" name="total" id="total-input" value="{{ $penjualanTelur->total }}">
+                    <div class="form-text">= Jumlah ikat × Harga per ikat (otomatis)</div>
+                </div>
+            </div>
+
+            <button class="btn btn-primary">Update</button>
+            <a href="{{ route('penjualan-telur.index') }}" class="btn btn-secondary">Kembali</a>
+        </form>
     </div>
-
-    <div class="col-md-6 mb-3">
-        <label>Customer</label>
-
-        <input
-            type="text"
-            name="customer"
-            class="form-control"
-            value="{{ old('customer', $penjualanTelur->customer) }}"
-            required
-        >
-    </div>
-
-    <div class="col-md-6 mb-3">
-        <label>Produksi Telur</label>
-
-        <select name="produksi_id" class="form-select" required>
-
-            @foreach($produksis as $produksi)
-
-                <option
-                    value="{{ $produksi->id }}"
-                    @selected($penjualanTelur->produksi_id == $produksi->id)
-                >
-                    {{ $produksi->tanggal->format('d-m-Y') }}
-                    -
-                    {{ $produksi->kandang->nama ?? '-' }}
-                </option>
-
-            @endforeach
-
-        </select>
-    </div>
-
-    @foreach([
-        'jumlah' => 'Jumlah',
-        'harga' => 'Harga',
-        'total' => 'Total'
-    ] as $field => $label)
-
-        <div class="col-md-6 mb-3">
-
-            <label>{{ $label }}</label>
-
-            <input
-                type="number"
-                name="{{ $field }}"
-                class="form-control"
-                value="{{ old($field, $penjualanTelur->$field) }}"
-                min="0"
-                required
-            >
-
-        </div>
-
-    @endforeach
-
-</div>
-
-<button class="btn btn-primary">
-    Update
-</button>
-
-<a
-    href="{{ route('penjualan-telur.index') }}"
-    class="btn btn-secondary"
->
-    Kembali
-</a>
-
-</form>
-
-</div>
 </div>
 
 @endsection
+
+@push('scripts')
+<script>
+function formatRp(n) { return 'Rp ' + Number(n || 0).toLocaleString('id-ID'); }
+function hitungTotal() {
+    const j = parseInt(document.getElementById('jumlah').value || 0, 10) || 0;
+    const h = parseInt(document.getElementById('harga').value  || 0, 10) || 0;
+    const t = j * h;
+    document.getElementById('total-display').value = formatRp(t);
+    document.getElementById('total-input').value   = t;
+}
+document.getElementById('jumlah').addEventListener('input', hitungTotal);
+document.getElementById('harga').addEventListener('input', hitungTotal);
+hitungTotal();
+</script>
+@endpush

@@ -19,14 +19,15 @@
   --muted: #8a7a6e;
   --border: #e6dacc;
   --drawer-width: 380px;
+  --sidebar-width: 260px;
 }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background); color: var(--text); }
 
-/* SIDEBAR */
-.sidebar { width: 260px; height: 100vh; position: fixed; left: 0; top: 0; background: var(--sidebar); color: white; z-index: 1000; transition: 0.3s; overflow-y: auto; }
+/* ===== SIDEBAR ===== */
+.sidebar { width: var(--sidebar-width); height: 100vh; position: fixed; left: 0; top: 0; background: var(--sidebar); color: white; z-index: 1000; transition: transform .3s ease; overflow-y: auto; }
 .brand { height: 75px; display: flex; align-items: center; padding: 0 24px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-.brand-icon { width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; background: var(--primary); border-radius: 12px; font-size: 22px; margin-right: 12px; }
+.brand-icon { width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; background: var(--primary); border-radius: 12px; font-size: 22px; margin-right: 12px; flex-shrink: 0; }
 .brand-icon i { display: inline-block; animation: wobble 2.6s ease-in-out infinite; }
 .brand-title { font-size: 18px; font-weight: 800; }
 .brand-subtitle { font-size: 11px; color: #cbb5a8; }
@@ -38,32 +39,35 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 .sidebar a i { font-size: 17px; }
 .sidebar-footer { padding: 14px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 20px; }
 
-/* MAIN */
-.main {
-  margin-left: 260px;
-  min-height: 100vh;
-  transition: width 0.35s ease, padding-right 0.35s ease;
-  width: calc(100% - 260px);
-}
-.topbar { height: 75px; background: white; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 30px; }
-.page-title { font-size: 18px; font-weight: 700; }
+/* ===== OVERLAY (gelap, saat sidebar terbuka di HP) ===== */
+.sidebar-overlay { position: fixed; inset: 0; background: rgba(20,10,5,.5); z-index: 999; opacity: 0; visibility: hidden; transition: opacity .25s ease, visibility .25s ease; }
+
+/* ===== MAIN ===== */
+.main { margin-left: var(--sidebar-width); min-height: 100vh; transition: margin-left .3s ease, width .35s ease; width: calc(100% - var(--sidebar-width)); }
+.topbar { height: 75px; background: white; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 30px; gap: 12px; position: sticky; top: 0; z-index: 900; }
+.topbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.page-title { font-size: 18px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .page-subtitle { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .profile { display: flex; align-items: center; gap: 10px; }
-.profile-avatar { width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; background: #e8d5bd; color: var(--primary-dark); border-radius: 50%; font-weight: 700; }
+.profile-avatar { width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; background: #e8d5bd; color: var(--primary-dark); border-radius: 50%; font-weight: 700; flex-shrink: 0; }
 .btn-logout { background: transparent; border: 1px solid var(--border); color: #ffffff; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; transition: 0.2s; }
 .btn-logout:hover { background: #f8d7da; color: #842029; border-color: #f8d7da; }
 .content { padding: 30px; }
 
-/* Saat drawer terbuka → main menyempit dari kanan */
-.main.drawer-open {
-  width: calc(100% - 260px - var(--drawer-width));
+/* ===== TOMBOL TOGGLE SIDEBAR (☰) ===== */
+.btn-toggle-sidebar {
+  width: 40px; height: 40px; flex-shrink: 0;
+  display: none; align-items: center; justify-content: center;
+  background: #fff; border: 1px solid var(--border); border-radius: 10px;
+  font-size: 18px; color: var(--text); cursor: pointer; transition: .2s;
 }
+.btn-toggle-sidebar:hover { background: var(--background); }
 
-/* CARDS */
+/* ===== CARDS & PANELS ===== */
 .stat-card { background: white; border: 1px solid var(--border); border-radius: 16px; padding: 20px; height: 100%; transition: 0.2s; }
 .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.06); }
 .stat-top { display: flex; justify-content: space-between; align-items: center; }
-.stat-icon { width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; border-radius: 12px; font-size: 20px; }
+.stat-icon { width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; border-radius: 12px; font-size: 20px; flex-shrink: 0; }
 .icon-green { background: #e8d5bd; color: #5d4037; }
 .icon-blue { background: #cfe2ff; color: #084298; }
 .icon-yellow { background: #fff3cd; color: #997404; }
@@ -72,18 +76,15 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 .stat-value { font-size: 27px; font-weight: 800; margin-top: 4px; }
 .stat-description { color: var(--muted); font-size: 11px; margin-top: 4px; }
 
-/* PANEL */
 .panel { background: white; border: 1px solid var(--border); border-radius: 16px; padding: 22px; height: 100%; }
 .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .panel-title { font-size: 16px; font-weight: 700; }
 .panel-link { color: var(--primary); text-decoration: none; font-size: 13px; font-weight: 600; }
 
-/* TABLE */
 .table { vertical-align: middle; }
 .table thead th { font-size: 12px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
 .table tbody td { font-size: 13px; border-color: #f0e9df; }
 
-/* BUTTON & BADGE */
 .btn-primary { background: var(--primary); border-color: var(--primary); }
 .btn-primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
 .btn-success { background: var(--primary); border-color: var(--primary); }
@@ -92,39 +93,26 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 
 @keyframes wobble { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); } }
 
-/* FLOATING BUTTON */
+/* ===== FLOATING BUTTON & DRAWER ===== */
 .btn-float-laporan {
-    position: fixed;
-    right: 22px;
-    bottom: 22px;
-    z-index: 1040;
-    width: 56px; height: 56px;
-    border-radius: 50%;
-    background: var(--primary);
-    color: #fff;
-    border: none;
-    font-size: 22px;
-    box-shadow: 0 8px 20px rgba(45,27,22,.35);
-    display: flex; align-items: center; justify-content: center;
-    transition: transform .2s ease, background .2s ease, right .35s ease;
+  position: fixed; right: 22px; bottom: 22px; z-index: 1040;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--primary); color: #fff; border: none; font-size: 22px;
+  box-shadow: 0 8px 20px rgba(45,27,22,.35);
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .2s ease, background .2s ease, right .35s ease;
 }
 .btn-float-laporan:hover { transform: translateY(-3px); background: var(--primary-dark); }
 .btn-float-laporan .badge-count {
-    position: absolute; top: -4px; right: -4px;
-    background: #d93636; color: #fff;
-    font-size: 10px; font-weight: 700;
-    border-radius: 999px; padding: 3px 6px;
+  position: absolute; top: -4px; right: -4px;
+  background: #d93636; color: #fff; font-size: 10px; font-weight: 700;
+  border-radius: 999px; padding: 3px 6px;
 }
-/* Geser tombol ke kiri saat drawer terbuka */
-body.drawer-open .btn-float-laporan {
-    right: calc(var(--drawer-width) + 22px);
-}
-
-/* DRAWER (override offcanvas) */
+body.drawer-open .btn-float-laporan { right: calc(var(--drawer-width) + 22px); }
 #laporanDrawer {
-    --bs-offcanvas-width: var(--drawer-width);
-    box-shadow: -8px 0 24px rgba(0,0,0,.18);
-    border-left: 1px solid var(--border);
+  --bs-offcanvas-width: var(--drawer-width);
+  box-shadow: -8px 0 24px rgba(0,0,0,.18);
+  border-left: 1px solid var(--border);
 }
 .laporan-item { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; background: #fff; }
 .laporan-item .head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
@@ -132,14 +120,35 @@ body.drawer-open .btn-float-laporan {
 .laporan-item .grid .v { font-weight: 700; font-size: 13px; }
 .laporan-item .grid .l { font-size: 10px; color: var(--muted); }
 
-/* MOBILE */
+/* ===== DESKTOP: tombol ☰ untuk collapse sidebar ===== */
+@media (min-width: 992px) {
+  .btn-toggle-sidebar { display: flex; }
+  body.sidebar-collapsed .sidebar { transform: translateX(-100%); }
+  body.sidebar-collapsed .main { margin-left: 0; width: 100%; }
+  body.sidebar-collapsed .main.drawer-open { width: calc(100% - var(--drawer-width)); }
+}
+
+/* ===== MOBILE / TABLET: sidebar jadi off-canvas ===== */
 @media (max-width: 991px) {
+  .btn-toggle-sidebar { display: flex; }
   .sidebar { transform: translateX(-100%); }
-  .sidebar.show { transform: translateX(0); }
+  body.sidebar-open .sidebar { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,.35); }
+  body.sidebar-open .sidebar-overlay { opacity: 1; visibility: visible; }
   .main { margin-left: 0; width: 100% !important; }
-  .content { padding: 20px; }
-  .topbar { padding: 0 20px; }
   .main.drawer-open { width: 100% !important; }
+  body.drawer-open .btn-float-laporan { right: 22px; }
+  .content { padding: 16px; }
+  .topbar { padding: 0 16px; height: 64px; }
+  .page-title { font-size: 16px; }
+  .page-subtitle { font-size: 11px; }
+  .stat-value { font-size: 22px; }
+  .brand { height: 64px; }
+}
+
+/* ===== HP KECIL ===== */
+@media (max-width: 480px) {
+  #laporanDrawer { --bs-offcanvas-width: min(var(--drawer-width), 92vw); }
+  .content { padding: 12px; }
 }
 </style>
 @stack('styles')
@@ -171,12 +180,19 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
             <a href="{{ route('populasi.index') }}" class="{{ request()->is('populasi*') ? 'active' : '' }}">
                 <i class="bi bi-people-fill"></i> Populasi Ayam
             </a>
+            <a href="{{ route('bobot.index') }}" class="{{ request()->is('bobot*') ? 'active' : '' }}">
+                <i class="bi bi-speedometer2"></i> Bobot Ayam
+            </a>
             <div class="menu-title">Produksi</div>
             <a href="{{ route('produksi-telur.index') }}" class="{{ request()->is('produksi-telur*') ? 'active' : '' }}">
                 <i class="bi bi-egg-fill"></i> Produksi Telur
             </a>
             <a href="{{ route('penjualan-telur.index') }}" class="{{ request()->is('penjualan-telur*') ? 'active' : '' }}">
                 <i class="bi bi-cash-stack"></i> Penjualan Telur
+            </a>
+            <div class="menu-title">Keuangan</div>
+            <a href="{{ route('arus-kas.index') }}" class="{{ request()->is('arus-kas*') ? 'active' : '' }}">
+                <i class="bi bi-cash-coin"></i> Arus Kas
             </a>
             <div class="menu-title">Pakan</div>
             <a href="{{ route('pakan-kandang.index') }}" class="{{ request()->is('pakan-kandang*') ? 'active' : '' }}">
@@ -209,11 +225,19 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
     </div>
 </aside>
 
+{{-- Overlay gelap saat sidebar terbuka di HP --}}
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
 <div class="main" id="mainArea">
     <header class="topbar">
-        <div>
-            <div class="page-title">@yield('title', 'Dashboard')</div>
-            <div class="page-subtitle">Sistem Manajemen Peternakan Ayam</div>
+        <div class="topbar-left">
+            <button class="btn-toggle-sidebar" id="btnToggleSidebar" type="button" title="Buka / tutup menu">
+                <i class="bi bi-list"></i>
+            </button>
+            <div>
+                <div class="page-title">@yield('title', 'Dashboard')</div>
+                <div class="page-subtitle">Sistem Manajemen Peternakan Ayam</div>
+            </div>
         </div>
         <div class="profile">
             @auth
@@ -249,6 +273,37 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 @stack('scripts')
 
+{{-- ===== LOGIKA TOGGLE SIDEBAR (desktop collapse / mobile off-canvas) ===== --}}
+<script>
+(function () {
+    var btn     = document.getElementById('btnToggleSidebar');
+    var overlay = document.getElementById('sidebarOverlay');
+    var sidebar = document.getElementById('sidebar');
+    function isMobile() { return window.innerWidth < 992; }
+
+    if (btn) btn.addEventListener('click', function () {
+        if (isMobile()) document.body.classList.toggle('sidebar-open');   // HP: buka/tutup geser
+        else            document.body.classList.toggle('sidebar-collapsed'); // Desktop: collapse
+    });
+
+    if (overlay) overlay.addEventListener('click', function () {
+        document.body.classList.remove('sidebar-open');
+    });
+
+    // Klik menu di HP → sidebar otomatis tertutup
+    if (sidebar) sidebar.querySelectorAll('a').forEach(function (a) {
+        a.addEventListener('click', function () {
+            if (isMobile()) document.body.classList.remove('sidebar-open');
+        });
+    });
+
+    // Kalau layar dibesarkan lagi, mode mobile dimatikan
+    window.addEventListener('resize', function () {
+        if (!isMobile()) document.body.classList.remove('sidebar-open');
+    });
+})();
+</script>
+
 {{-- ===== FLOATING LAPORAN HARIAN (khusus admin) ===== --}}
 @if ($isAdmin)
 @php
@@ -257,7 +312,6 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
     $laporanHariIni = \App\Models\LaporanHarian::whereDate('tanggal', today())->count();
 @endphp
 
-{{-- Tombol melayang --}}
 <button class="btn-float-laporan" type="button" data-bs-toggle="offcanvas"
         data-bs-target="#laporanDrawer" aria-controls="laporanDrawer"
         title="Lihat laporan harian terbaru">
@@ -267,7 +321,6 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
     @endif
 </button>
 
-{{-- Panel berdampingan (tanpa backdrop, scroll aktif) --}}
 <div class="offcanvas offcanvas-end" tabindex="-1" id="laporanDrawer"
      aria-labelledby="laporanDrawerLabel"
      data-bs-backdrop="false"
@@ -279,7 +332,6 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
     <div class="offcanvas-body">
-
         @forelse($laporanFloating as $lap)
             <div class="laporan-item">
                 <div class="head">
@@ -307,7 +359,6 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
                 Belum ada laporan harian.
             </div>
         @endforelse
-
         <a href="{{ route('admin.laporan.index') }}" class="btn btn-sm btn-primary w-100">
             Lihat Semua Laporan
         </a>
@@ -319,7 +370,6 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
     const drawer = document.getElementById('laporanDrawer');
     const mainArea = document.getElementById('mainArea');
     if (!drawer || !mainArea) return;
-
     drawer.addEventListener('show.bs.offcanvas', () => {
         mainArea.classList.add('drawer-open');
         document.body.classList.add('drawer-open');

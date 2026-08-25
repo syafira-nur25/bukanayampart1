@@ -84,6 +84,7 @@ use App\Http\Controllers\PakanKandangController;
 use App\Http\Controllers\PemberianPakanController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Manpower\LaporanHarianController;
+use App\Http\Controllers\BobotAyamController;
 
 // LANDING PAGE (publik)
 Route::get('/', function () {
@@ -96,13 +97,14 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
 
     Route::resource('kandang', KandangController::class);
     Route::resource('populasi', PopulasiController::class);
+    Route::resource('bobot', BobotAyamController::class);
     Route::resource('produksi-telur', ProduksiTelurController::class);
     Route::resource('penjualan-telur', PenjualanTelurController::class);
     Route::resource('pemberian-pakan', PemberianPakanController::class);
     Route::resource('pakan-kandang', PakanKandangController::class);
 
-    Route::get('/laporan-pakan', [PakanKandangController::class, 'laporan'])->name('pakan.laporan');
-
+Route::get('/laporan-pakan', [PakanKandangController::class, 'laporan'])->name('pakan.laporan');
+Route::get('/laporan-pakan/export', [PakanKandangController::class, 'exportExcel'])->name('pakan.laporan.export'); // <-- BARU
     // Laporan harian (rekap kiriman man power)
     Route::get('/admin/laporan', [LaporanHarianController::class, 'index'])->name('admin.laporan.index');
 
@@ -118,6 +120,128 @@ Route::middleware(['auth', 'role:manpower'])->group(function () {
 });
 
 require __DIR__.'/auth.php';
+
+
+===== C:\xampp\htdocs\peternakan_ayam\app\Http\Controllers\BobotAyamController.php =====
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\BobotAyam;
+use App\Models\Kandang;
+use Illuminate\Http\Request;
+
+class BobotAyamController extends Controller
+{
+    public function index()
+    {
+        $kandangs = Kandang::orderBy('id')->get();
+        $tanggals = BobotAyam::select('tanggal')->distinct()->orderBy('tanggal')->get();
+
+        // grouping: kandang_id -> tanggal -> [list sample]
+        $grouped = BobotAyam::orderBy('tanggal')->get()
+            ->groupBy('kandang_id')
+            ->map(fn ($items) => $items->groupBy(fn ($b) => $b->tanggal->toDateString()));
+
+        $rows = [];
+        foreach ($kandangs as $kandang) {
+            $map = $grouped->get($kandang->id, collect());
+
+            // "terbaru" = daftar sampel di tanggal paling akhir kandang ini
+            $tanggalTerbaru = $map->keys()->sort()->last();
+            $sampelTerbaru  = $tanggalTerbaru ? $map->get($tanggalTerbaru) : collect();
+
+            $rows[] = [
+                'kandang'       => $kandang,
+                'map'           => $map,
+                'sampelTerbaru' => $sampelTerbaru,
+                'rataTerbaru'   => $sampelTerbaru->count()
+                    ? round($sampelTerbaru->avg('bobot'))
+                    : null,
+            ];
+        }
+
+        // Resume: total & rata-rata dari sampel terbaru tiap kandang
+        $latestAvgs = collect($rows)
+            ->filter(fn ($r) => $r['rataTerbaru'] !== null)
+            ->pluck('rataTerbaru');
+
+        $totalBobot = $latestAvgs->sum();
+        $rataRata   = $latestAvgs->count() ? round($latestAvgs->avg()) : 0;
+
+        // Per-tanggal: total & rata-rata per kolom (rata-rata dari rata-rata tiap kandang)
+        $perTanggal = [];
+        foreach ($tanggals as $t) {
+            $key = $t->tanggal->toDateString();
+            $rataPerKandang = collect($rows)
+                ->map(function ($r) use ($key) {
+                    $list = $r['map']->get($key);
+                    return $list ? round($list->avg('bobot')) : null;
+                })
+                ->filter(fn ($v) => $v !== null);
+
+            $perTanggal[$key] = [
+                'total' => $rataPerKandang->sum(),
+                'rata'  => $rataPerKandang->count() ? round($rataPerKandang->avg()) : 0,
+            ];
+        }
+
+        $riwayat = BobotAyam::with('kandang')->latest('tanggal')->latest('id')->get();
+
+        return view('bobot.index', compact(
+            'kandangs', 'tanggals', 'rows', 'perTanggal',
+            'totalBobot', 'rataRata', 'riwayat'
+        ));
+    }
+
+    public function create()
+    {
+        return view('bobot.create', [
+            'kandangs' => Kandang::orderBy('id')->get(),
+        ]);
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'kandang_id' => 'required|exists:kandang,id',
+            'tanggal'    => 'required|date',
+            'bobot'      => 'required|integer|min:0',
+        ]);
+
+        // create biasa — boleh banyak sampel per kandang+tanggal
+        BobotAyam::create($validated);
+
+        return redirect()->route('bobot.index')->with('success', 'Sampel bobot berhasil disimpan.');
+    }
+
+    public function edit(BobotAyam $bobot)
+    {
+        return view('bobot.edit', [
+            'bobot'    => $bobot,
+            'kandangs' => Kandang::orderBy('id')->get(),
+        ]);
+    }
+
+    public function update(Request $request, BobotAyam $bobot)
+    {
+        $validated = $request->validate([
+            'kandang_id' => 'required|exists:kandang,id',
+            'tanggal'    => 'required|date',
+            'bobot'      => 'required|integer|min:0',
+        ]);
+
+        $bobot->update($validated);
+
+        return redirect()->route('bobot.index')->with('success', 'Data bobot berhasil diperbarui.');
+    }
+
+    public function destroy(BobotAyam $bobot)
+    {
+        $bobot->delete();
+        return redirect()->route('bobot.index')->with('success', 'Sampel bobot berhasil dihapus.');
+    }
+}
 
 
 ===== C:\xampp\htdocs\peternakan_ayam\app\Http\Controllers\Controller.php =====
@@ -152,49 +276,50 @@ class DashboardController extends Controller
         $totalPenjualan = PenjualanTelur::sum('total');
 
         $produksiTerbaru = ProduksiTelur::with(['kandang'])
-            ->latest('tanggal')
-            ->limit(10)
-            ->get();
+            ->latest('tanggal')->limit(10)->get();
 
         /* ===== Grafik produksi telur ===== */
         $chart = ProduksiTelur::selectRaw('tanggal, SUM(jumlah_produksi) as total')
-            ->groupBy('tanggal')
-            ->orderBy('tanggal')
-            ->limit(7)
-            ->get();
-
+            ->groupBy('tanggal')->orderBy('tanggal')->limit(7)->get();
         $chartLabels = $chart->map(fn ($item) => $item->tanggal->format('d M'));
         $chartData   = $chart->pluck('total');
 
-        /* ===== Data kematian (prioritas laporan manpower, fallback populasi) ===== */
+        /* ===== Grafik penjualan (7 hari terakhir) ===== */
+        $penjualanChart = PenjualanTelur::selectRaw('tanggal, SUM(total) as total')
+            ->where('tanggal', '>=', now()->subDays(6)->toDateString())
+            ->groupBy('tanggal')->orderBy('tanggal')->get();
+
+        // isi hari kosong agar grafik tetap 7 titik
+        $penjualanMap = $penjualanChart->pluck('total', 'tanggal')->map(fn ($v) => (int) $v);
+        $penjualanLabels = collect();
+        $penjualanData   = collect();
+        for ($i = 6; $i >= 0; $i--) {
+            $tgl = now()->subDays($i)->toDateString();
+            $penjualanLabels->push(now()->subDays($i)->format('d M'));
+            $penjualanData->push($penjualanMap[$tgl] ?? 0);
+        }
+
+        /* ===== Data kematian ===== */
         $pakaiLaporan   = LaporanHarian::query()->exists();
         $sumberKematian = $pakaiLaporan ? 'Laporan Harian Man Power' : 'Data Populasi';
-
         $kematian = ($pakaiLaporan
             ? LaporanHarian::selectRaw('tanggal, SUM(mati) as mati, SUM(afkir) as afkir')
             : Populasi::selectRaw('tanggal, SUM(mati) as mati, SUM(afkir) as afkir'))
-            ->groupBy('tanggal')
-            ->orderBy('tanggal')
-            ->get();
-
-        $chartKematian = $kematian->take(-7)->values();
-
+            ->groupBy('tanggal')->orderBy('tanggal')->get();
+        $chartKematian  = $kematian->take(-7)->values();
         $kematianLabels = $chartKematian->map(fn ($item) => $item->tanggal->format('d M'));
         $kematianMati   = $chartKematian->pluck('mati');
         $kematianAfkir  = $chartKematian->pluck('afkir');
 
-        /* ===== Resume kematian ===== */
-        $totalMati  = (int) $kematian->sum('mati');
-        $totalAfkir = (int) $kematian->sum('afkir');
-
-        $denominator   = $totalMati + $totalAfkir + (int) $totalAyam;
-        $mortalityRate = $denominator > 0
-            ? round($totalMati / $denominator * 100, 2)
-            : 0;
+        $totalMati       = (int) $kematian->sum('mati');
+        $totalAfkir      = (int) $kematian->sum('afkir');
+        $denominator     = $totalMati + $totalAfkir + (int) $totalAyam;
+        $mortalityRate   = $denominator > 0 ? round($totalMati / $denominator * 100, 2) : 0;
 
         return view('dashboard', compact(
             'totalKandang', 'totalAyam', 'totalTelur', 'totalPenjualan',
             'produksiTerbaru', 'chartLabels', 'chartData',
+            'penjualanLabels', 'penjualanData',
             'sumberKematian', 'kematianLabels', 'kematianMati', 'kematianAfkir',
             'totalMati', 'totalAfkir', 'mortalityRate'
         ));
@@ -682,16 +807,17 @@ class PopulasiController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'tanggal'    => 'required|date',
-            'hidup'      => 'required|integer|min:0',
-            'mati'       => 'required|integer|min:0',
-            'afkir'      => 'required|integer|min:0',
-            'usia'       => 'required|integer|min:0',
-            'kandang_id' => 'required|exists:kandang,id',
+            'tanggal'      => 'required|date',
+            'hidup'        => 'required|integer|min:0',
+            'mati'         => 'required|integer|min:0',
+            'afkir'        => 'required|integer|min:0',
+            'umur_minggu'  => 'required|integer|min:0',
+            'kandang_id'   => 'required|exists:kandang,id',
         ]);
 
-        // SISA OTOMATIS = hidup - mati - afkir
-        $validated['sisa'] = max(0, $validated['hidup'] - $validated['mati'] - $validated['afkir']);
+        $validated['sisa'] = max(0, $validated['hidup'] - $validated['mati']);
+        $validated['usia'] = $validated['umur_minggu'] * 7;
+        unset($validated['umur_minggu']);
 
         Populasi::create($validated);
 
@@ -714,15 +840,17 @@ class PopulasiController extends Controller
     public function update(Request $request, Populasi $populasi)
     {
         $validated = $request->validate([
-            'tanggal'    => 'required|date',
-            'hidup'      => 'required|integer|min:0',
-            'mati'       => 'required|integer|min:0',
-            'afkir'      => 'required|integer|min:0',
-            'usia'       => 'required|integer|min:0',
-            'kandang_id' => 'required|exists:kandang,id',
+            'tanggal'      => 'required|date',
+            'hidup'        => 'required|integer|min:0',
+            'mati'         => 'required|integer|min:0',
+            'afkir'        => 'required|integer|min:0',
+            'umur_minggu'  => 'required|integer|min:0',
+            'kandang_id'   => 'required|exists:kandang,id',
         ]);
 
-        $validated['sisa'] = max(0, $validated['hidup'] - $validated['mati'] - $validated['afkir']);
+        $validated['sisa'] = max(0, $validated['hidup'] - $validated['mati']);
+        $validated['usia'] = $validated['umur_minggu'] * 7;
+        unset($validated['umur_minggu']);
 
         $populasi->update($validated);
 
@@ -1340,43 +1468,38 @@ class LaporanHarianController extends Controller
         return view('admin.laporan.index', compact('kandangs', 'laporan'));
     }
 
-    /** MANPOWER: form laporan harian */
     public function create()
     {
         $kandangs = Kandang::orderBy('id')->get();
-
         $populasiTerakhir = [];
-
         foreach ($kandangs as $kandang) {
             $lastLaporan = LaporanHarian::where('kandang_id', $kandang->id)
-                ->orderByDesc('tanggal')
-                ->orderByDesc('id')
-                ->first();
+                ->orderByDesc('tanggal')->orderByDesc('id')->first();
+
+            $pop = Populasi::where('kandang_id', $kandang->id)
+                ->latest('tanggal')->first();
 
             if ($lastLaporan) {
-                // acuan dari laporan terakhir
                 $populasiTerakhir[$kandang->id] = [
-                    'sisa'    => (int) $lastLaporan->sisa_ayam,
-                    'tanggal' => $lastLaporan->tanggal->format('d/m/Y'),
+                    'sisa'          => (int) $lastLaporan->sisa_ayam,
+                    'tanggal'       => $lastLaporan->tanggal->format('d/m/Y'),
+                    'usia_dasar'    => $pop ? (int) $pop->usia : 0,
+                    'tanggal_dasar' => $pop ? $pop->tanggal->toDateString() : null,
                 ];
             } else {
-                $pop = Populasi::where('kandang_id', $kandang->id)
-                    ->orderByDesc('tanggal')
-                    ->first();
-
-                // PENTING: null = benar-benar belum ada data → field boleh diisi manual
-                $populasiTerakhir[$kandang->id] = $pop
-                    ? [
-                        'sisa'    => (int) $pop->sisa,
-                        'tanggal' => $pop->tanggal->format('d/m/Y'),
-                    ]
-                    : null;
+                $populasiTerakhir[$kandang->id] = $pop ? [
+                    'sisa'          => (int) $pop->sisa,
+                    'tanggal'       => $pop->tanggal->format('d/m/Y'),
+                    'usia_dasar'    => (int) $pop->usia,
+                    'tanggal_dasar' => $pop->tanggal->toDateString(),
+                ] : null;
             }
         }
 
         return view('manpower.create', [
             'kandangs'         => $kandangs,
             'populasiTerakhir' => $populasiTerakhir,
+            'today'            => now()->toDateString(),
         ]);
     }
 
@@ -1581,6 +1704,36 @@ class LoginRequest extends FormRequest
 }
 
 
+===== C:\xampp\htdocs\peternakan_ayam\app\Models\BobotAyam.php =====
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class BobotAyam extends Model
+{
+    protected $table = 'bobot_ayam';
+
+    protected $fillable = [
+        'kandang_id',
+        'tanggal',
+        'bobot',
+    ];
+
+    protected $casts = [
+        'tanggal' => 'date',
+        'bobot'   => 'integer',
+    ];
+
+    public function kandang(): BelongsTo
+    {
+        return $this->belongsTo(Kandang::class, 'kandang_id');
+    }
+}
+
+
 ===== C:\xampp\htdocs\peternakan_ayam\app\Models\Kandang.php =====
 <?php
 
@@ -1633,7 +1786,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class LaporanHarian extends Model
 {
     protected $table = 'laporan_harian';
-
     protected $fillable = [
         'tanggal', 'kandang_id', 'user_id', 'umur_minggu',
         'hidup', 'mati', 'afkir', 'sisa_ayam',
@@ -1697,8 +1849,7 @@ class LaporanHarian extends Model
 
     /**
      * Hitung ulang rantai hidup & sisa mulai tanggal tertentu.
-     * Dipanggil setiap kali ada laporan yang ditambah / diubah / dihapus,
-     * supaya data selalu konsisten berantai.
+     * Sisa = hidup - mati (afkir TIDAK mengurangi sisa).
      */
     public static function hitungUlangRantai(int $kandangId, string $mulaiTanggal): void
     {
@@ -1711,13 +1862,11 @@ class LaporanHarian extends Model
         $sisaSebelum = static::baselineSebelum($kandangId, $mulaiTanggal);
 
         foreach ($rows as $row) {
-            // kalau tidak ada baseline sama sekali, pakai nilai hidup lama sebagai titik awal
             $hidup = $sisaSebelum ?? (int) $row->hidup;
-
             $row->hidup     = $hidup;
-            $row->sisa_ayam = max(0, $hidup - (int) $row->mati - (int) $row->afkir);
+            // ABAIKAN afkir: sisa = hidup - mati saja
+            $row->sisa_ayam = max(0, $hidup - (int) $row->mati);
             $row->save();
-
             $sisaSebelum = $row->sisa_ayam;
         }
     }
@@ -2655,6 +2804,70 @@ return new class extends Migration
 };
 
 
+===== C:\xampp\htdocs\peternakan_ayam\database\migrations\2026_08_25_000001_create_bobot_ayam_table.php =====
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('bobot_ayam', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('kandang_id')->constrained('kandang')->cascadeOnDelete();
+            $table->date('tanggal');
+            $table->integer('bobot')->default(0); // dalam gram
+            $table->timestamps();
+            $table->unique(['kandang_id', 'tanggal']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('bobot_ayam');
+    }
+};
+
+
+===== C:\xampp\htdocs\peternakan_ayam\database\migrations\2026_08_25_100000_bobot_ayam_allow_multiple_samples.php =====
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        // 1) Tambahkan index biasa dulu, biar foreign key kandang_id
+        //    punya pengganti penopang
+        Schema::table('bobot_ayam', function (Blueprint $table) {
+            $table->index('kandang_id');
+        });
+
+        // 2) Sekarang aman menghapus unique (kandang_id, tanggal)
+        Schema::table('bobot_ayam', function (Blueprint $table) {
+            $table->dropUnique(['kandang_id', 'tanggal']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('bobot_ayam', function (Blueprint $table) {
+            $table->unique(['kandang_id', 'tanggal']);
+        });
+
+        Schema::table('bobot_ayam', function (Blueprint $table) {
+            $table->dropIndex(['kandang_id']);
+        });
+    }
+};
+
+
 ===== C:\xampp\htdocs\peternakan_ayam\resources\views\dashboard.blade.php =====
 @extends('layouts.app')
 
@@ -2758,6 +2971,40 @@ return new class extends Migration
                     <i class="bi bi-basket-fill text-danger me-2"></i> Input Pemberian Pakan
                     <i class="bi bi-chevron-right float-end"></i>
                 </a>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- GRAFIK PENJUALAN (7 hari terakhir) -->
+<div class="row g-4 mb-4">
+    <div class="col-xl-8">
+        <div class="panel">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">Pendapatan Penjualan</div>
+                    <div class="text-muted small">Total penjualan telur 7 hari terakhir (Rp)</div>
+                </div>
+                <a href="{{ route('penjualan-telur.index') }}" class="panel-link">Lihat semua</a>
+            </div>
+            <canvas id="salesChart" height="110"></canvas>
+        </div>
+    </div>
+    <div class="col-xl-4">
+        <div class="stat-card h-100 d-flex flex-column justify-content-center">
+            <div class="stat-top">
+                <div>
+                    <div class="stat-label mt-0">Rata-rata / hari</div>
+                    @php
+                        $avgSales = count($penjualanData ?? [])
+                            ? round(collect($penjualanData)->avg())
+                            : 0;
+                    @endphp
+                    <div class="stat-value">Rp {{ number_format($avgSales, 0, ',', '.') }}</div>
+                </div>
+                <div class="stat-icon icon-green"><i class="bi bi-graph-up-arrow"></i></div>
+            </div>
+            <div class="stat-description mt-3">
+                Total 7 hari: <strong>Rp {{ number_format(collect($penjualanData ?? [])->sum(), 0, ',', '.') }}</strong>
             </div>
         </div>
     </div>
@@ -2873,6 +3120,40 @@ return new class extends Migration
             scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
     });
+    new Chart(document.getElementById('salesChart'), {
+    type: 'bar',
+    data: {
+        labels: {!! json_encode($penjualanLabels ?? []) !!},
+        datasets: [{
+            label: 'Penjualan (Rp)',
+            data: {!! json_encode($penjualanData ?? []) !!},
+            backgroundColor: 'rgba(109, 76, 65, 0.8)',
+            borderColor: '#5d4037',
+            borderWidth: 1,
+            borderRadius: 8
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                callbacks: {
+                    label: ctx => 'Rp ' + Number(ctx.parsed.y).toLocaleString('id-ID')
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: v => 'Rp ' + (v/1000).toLocaleString('id-ID') + 'rb'
+                }
+            }
+        }
+    }
+});
+
 </script>
 @endpush
 
@@ -3687,6 +3968,14 @@ footer{background:var(--coklat-900);color:#cbb5a8}
                     </td>
                 </tr>
                 @endforelse
+                <tfoot>
+                    <tr class="table-active fw-bold">
+                        <td colspan="8" class="text-end">TOTAL:</td>
+                        <td>{{ number_format($laporan->sum('produksi_telur')) }}</td>
+                        <td>{{ number_format($laporan->sum('telur_pecah')) }}</td>
+                        <td colspan="3"></td>
+                    </tr>
+                </tfoot>   
             </tbody>
         </table>
     </div>
@@ -3926,6 +4215,268 @@ footer{background:var(--coklat-900);color:#cbb5a8}
         </form>
     </div>
 </x-guest-layout>
+
+
+===== C:\xampp\htdocs\peternakan_ayam\resources\views\bobot\create.blade.php =====
+@extends('layouts.app')
+
+@section('title', 'Catat Bobot')
+
+@section('content')
+<h2 class="mb-3">Catat Bobot Ayam</h2>
+<div class="card">
+    <div class="card-body">
+        <form action="{{ route('bobot.store') }}" method="POST">
+            @csrf
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Kandang</label>
+                    <select name="kandang_id" class="form-select" required>
+                        <option value="">-- Pilih Kandang --</option>
+                        @foreach ($kandangs as $k)
+                            <option value="{{ $k->id }}" @selected(old('kandang_id') == $k->id)>
+                                {{ $k->nama }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Tanggal</label>
+                    <input type="date" name="tanggal" class="form-control"
+                        value="{{ old('tanggal', date('Y-m-d')) }}" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Bobot (gram)</label>
+                    <input type="number" name="bobot" class="form-control"
+                        value="{{ old('bobot') }}" min="0" required>
+                    <div class="form-text">Contoh: 1500 = 1,5 kg. Input ulang untuk menambah sampel lain.</div>
+                </div>
+            </div>
+            <button class="btn btn-primary">Simpan Sampel</button>
+            <a href="{{ route('bobot.index') }}" class="btn btn-secondary">Kembali</a>
+        </form>
+
+    </div>
+</div>
+@endsection
+
+
+===== C:\xampp\htdocs\peternakan_ayam\resources\views\bobot\edit.blade.php =====
+@extends('layouts.app')
+
+@section('title', 'Edit Bobot')
+
+@section('content')
+<h2 class="mb-3">Edit Bobot Ayam</h2>
+<div class="card">
+    <div class="card-body">
+        <form action="{{ route('bobot.update', $bobot) }}" method="POST">
+            @csrf
+            @method('PUT')
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Kandang</label>
+                    <select name="kandang_id" class="form-select" required>
+                        @foreach ($kandangs as $k)
+                            <option value="{{ $k->id }}" @selected($bobot->kandang_id == $k->id)>{{ $k->nama }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Tanggal</label>
+                    <input type="date" name="tanggal" class="form-control"
+                        value="{{ old('tanggal', $bobot->tanggal->format('Y-m-d')) }}" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Bobot (gram)</label>
+                    <input type="number" name="bobot" class="form-control"
+                        value="{{ old('bobot', $bobot->bobot) }}" min="0" required>
+                </div>
+            </div>
+            <button class="btn btn-primary">Update</button>
+            <a href="{{ route('bobot.index') }}" class="btn btn-secondary">Kembali</a>
+        </form>
+    </div>
+</div>
+@endsection
+
+
+===== C:\xampp\htdocs\peternakan_ayam\resources\views\bobot\index.blade.php =====
+@extends('layouts.app')
+
+@section('title', 'Bobot Ayam')
+
+@section('content')
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">Data Bobot Ayam</h2>
+    <a href="{{ route('bobot.create') }}" class="btn btn-primary">+ Catat Bobot</a>
+</div>
+
+<style>
+    .sample-cell { min-width: 110px; font-size: 12px; }
+    .sample-item {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 2px 6px; margin-bottom: 2px;
+        background: #fff8ef; border-radius: 6px; border: 1px solid var(--border);
+    }
+    .sample-item .idx { font-weight: 700; color: var(--primary); }
+    .sample-avg {
+        font-weight: 700; color: var(--primary-dark);
+        padding: 4px 6px; margin-top: 3px; border-top: 1px dashed var(--border);
+        font-size: 12px;
+    }
+    .sample-empty { color: #b9a797; font-style: italic; }
+</style>
+
+<!-- RESUME -->
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-top">
+                <div>
+                    <div class="stat-label mt-0">Total Bobot (terbaru)</div>
+                    <div class="stat-value">{{ number_format($totalBobot) }} g</div>
+                </div>
+                <div class="stat-icon icon-green"><i class="bi bi-speedometer2"></i></div>
+            </div>
+            <div class="stat-description">
+                ≈ {{ number_format($totalBobot / 1000, 2) }} kg — jumlah rata-rata bobot terbaru tiap kandang
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-top">
+                <div>
+                    <div class="stat-label mt-0">Rata-rata Bobot</div>
+                    <div class="stat-value">{{ number_format($rataRata) }} g</div>
+                </div>
+                <div class="stat-icon icon-blue"><i class="bi bi-graph-up"></i></div>
+            </div>
+            <div class="stat-description">
+                ≈ {{ number_format($rataRata / 1000, 2) }} kg per ekor (rata-rata dari rata-rata kandang)
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-top">
+                <div>
+                    <div class="stat-label mt-0">Kandang Terdata</div>
+                    <div class="stat-value">{{ $kandangs->count() }}</div>
+                </div>
+                <div class="stat-icon icon-yellow"><i class="bi bi-house-door-fill"></i></div>
+            </div>
+            <div class="stat-description">{{ $tanggals->count() }} tanggal penimbangan tercatat</div>
+        </div>
+    </div>
+</div>
+
+<!-- TABEL PIVOT -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered align-middle">
+                <thead class="text-center">
+                    <tr>
+                        <th>No</th>
+                        <th>Kandang</th>
+                        @foreach ($tanggals as $t)
+                            <th>{{ $t->tanggal->format('d M Y') }}</th>
+                        @endforeach
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($rows as $i => $row)
+                        <tr>
+                            <td class="text-center">{{ $i + 1 }}</td>
+                            <td class="fw-bold">{{ $row['kandang']->nama }}</td>
+                            @foreach ($tanggals as $t)
+                                @php $list = $row['map']->get($t->tanggal->toDateString()); @endphp
+                                <td class="sample-cell">
+                                    @if ($list && $list->count())
+                                        @foreach ($list as $idx => $b)
+                                            <div class="sample-item">
+                                                <span class="idx">#{{ $idx + 1 }}</span>
+                                                <span>{{ number_format($b->bobot) }} g</span>
+                                            </div>
+                                        @endforeach
+                                        <div class="sample-avg">
+                                            Rata: {{ number_format(round($list->avg('bobot'))) }} g
+                                        </div>
+                                    @else
+                                        <span class="sample-empty">-</span>
+                                    @endif
+                                </td>
+                            @endforeach
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="{{ 2 + $tanggals->count() }}" class="text-center py-4">
+                                Belum ada data bobot.
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+                @if ($tanggals->count() > 0)
+                <tfoot>
+                    <tr class="table-active fw-bold text-center">
+                        <td colspan="2" class="text-end">TOTAL</td>
+                        @foreach ($tanggals as $t)
+                            <td>{{ number_format($perTanggal[$t->tanggal->toDateString()]['total']) }} g</td>
+                        @endforeach
+                    </tr>
+                    <tr class="table-active fw-bold text-center">
+                        <td colspan="2" class="text-end">RATA-RATA</td>
+                        @foreach ($tanggals as $t)
+                            <td>{{ number_format($perTanggal[$t->tanggal->toDateString()]['rata']) }} g</td>
+                        @endforeach
+                    </tr>
+                </tfoot>
+                @endif
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- RIWAYAT -->
+<div class="card">
+    <div class="card-body">
+        <div class="panel-title mb-3">Riwayat Sampel Bobot</div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Tanggal</th>
+                        <th>Kandang</th>
+                        <th>Bobot (gram)</th>
+                        <th width="180">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($riwayat as $r)
+                        <tr>
+                            <td>{{ $r->tanggal->format('d-m-Y') }}</td>
+                            <td>{{ $r->kandang->nama ?? '-' }}</td>
+                            <td class="fw-bold">{{ number_format($r->bobot) }} g</td>
+                            <td>
+                                <a href="{{ route('bobot.edit', $r) }}" class="btn btn-sm btn-warning">Edit</a>
+                                <form action="{{ route('bobot.destroy', $r) }}" method="POST" class="d-inline">
+                                    @csrf @method('DELETE')
+                                    <button class="btn btn-sm btn-danger"
+                                        onclick="return confirm('Hapus sampel bobot ini?')">Hapus</button>
+                                </form>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="4" class="text-center">Belum ada riwayat.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+@endsection
 
 
 ===== C:\xampp\htdocs\peternakan_ayam\resources\views\components\application-logo.blade.php =====
@@ -4400,6 +4951,7 @@ $classes = ($active ?? false)
   --text: #33261f;
   --muted: #8a7a6e;
   --border: #e6dacc;
+  --drawer-width: 380px;
 }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background); color: var(--text); }
@@ -4420,7 +4972,12 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 .sidebar-footer { padding: 14px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 20px; }
 
 /* MAIN */
-.main { margin-left: 260px; min-height: 100vh; }
+.main {
+  margin-left: 260px;
+  min-height: 100vh;
+  transition: width 0.35s ease, padding-right 0.35s ease;
+  width: calc(100% - 260px);
+}
 .topbar { height: 75px; background: white; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 30px; }
 .page-title { font-size: 18px; font-weight: 700; }
 .page-subtitle { font-size: 12px; color: var(--muted); margin-top: 2px; }
@@ -4429,6 +4986,11 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 .btn-logout { background: transparent; border: 1px solid var(--border); color: #ffffff; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; transition: 0.2s; }
 .btn-logout:hover { background: #f8d7da; color: #842029; border-color: #f8d7da; }
 .content { padding: 30px; }
+
+/* Saat drawer terbuka → main menyempit dari kanan */
+.main.drawer-open {
+  width: calc(100% - 260px - var(--drawer-width));
+}
 
 /* CARDS */
 .stat-card { background: white; border: 1px solid var(--border); border-radius: 16px; padding: 20px; height: 100%; transition: 0.2s; }
@@ -4454,7 +5016,7 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 .table thead th { font-size: 12px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
 .table tbody td { font-size: 13px; border-color: #f0e9df; }
 
-/* BUTTON & BADGE (hijau → coklat) */
+/* BUTTON & BADGE */
 .btn-primary { background: var(--primary); border-color: var(--primary); }
 .btn-primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
 .btn-success { background: var(--primary); border-color: var(--primary); }
@@ -4463,13 +5025,54 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 
 @keyframes wobble { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); } }
 
+/* FLOATING BUTTON */
+.btn-float-laporan {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 1040;
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    font-size: 22px;
+    box-shadow: 0 8px 20px rgba(45,27,22,.35);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .2s ease, background .2s ease, right .35s ease;
+}
+.btn-float-laporan:hover { transform: translateY(-3px); background: var(--primary-dark); }
+.btn-float-laporan .badge-count {
+    position: absolute; top: -4px; right: -4px;
+    background: #d93636; color: #fff;
+    font-size: 10px; font-weight: 700;
+    border-radius: 999px; padding: 3px 6px;
+}
+/* Geser tombol ke kiri saat drawer terbuka */
+body.drawer-open .btn-float-laporan {
+    right: calc(var(--drawer-width) + 22px);
+}
+
+/* DRAWER (override offcanvas) */
+#laporanDrawer {
+    --bs-offcanvas-width: var(--drawer-width);
+    box-shadow: -8px 0 24px rgba(0,0,0,.18);
+    border-left: 1px solid var(--border);
+}
+.laporan-item { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; background: #fff; }
+.laporan-item .head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+.laporan-item .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; text-align: center; }
+.laporan-item .grid .v { font-weight: 700; font-size: 13px; }
+.laporan-item .grid .l { font-size: 10px; color: var(--muted); }
+
 /* MOBILE */
 @media (max-width: 991px) {
   .sidebar { transform: translateX(-100%); }
   .sidebar.show { transform: translateX(0); }
-  .main { margin-left: 0; }
+  .main { margin-left: 0; width: 100% !important; }
   .content { padding: 20px; }
   .topbar { padding: 0 20px; }
+  .main.drawer-open { width: 100% !important; }
 }
 </style>
 @stack('styles')
@@ -4500,6 +5103,9 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
             </a>
             <a href="{{ route('populasi.index') }}" class="{{ request()->is('populasi*') ? 'active' : '' }}">
                 <i class="bi bi-people-fill"></i> Populasi Ayam
+            </a>
+            <a href="{{ route('bobot.index') }}" class="{{ request()->is('bobot*') ? 'active' : '' }}">
+                <i class="bi bi-speedometer2"></i> Bobot Ayam
             </a>
             <div class="menu-title">Produksi</div>
             <a href="{{ route('produksi-telur.index') }}" class="{{ request()->is('produksi-telur*') ? 'active' : '' }}">
@@ -4539,7 +5145,7 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
     </div>
 </aside>
 
-<div class="main">
+<div class="main" id="mainArea">
     <header class="topbar">
         <div>
             <div class="page-title">@yield('title', 'Dashboard')</div>
@@ -4578,6 +5184,7 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 @stack('scripts')
+
 {{-- ===== FLOATING LAPORAN HARIAN (khusus admin) ===== --}}
 @if ($isAdmin)
 @php
@@ -4585,37 +5192,6 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
         ->latest('tanggal')->latest('id')->limit(12)->get();
     $laporanHariIni = \App\Models\LaporanHarian::whereDate('tanggal', today())->count();
 @endphp
-
-<style>
-.btn-float-laporan {
-    position: fixed;
-    right: 22px;
-    bottom: 22px;
-    z-index: 1040;
-    width: 56px; height: 56px;
-    border-radius: 50%;
-    background: var(--primary);
-    color: #fff;
-    border: none;
-    font-size: 22px;
-    box-shadow: 0 8px 20px rgba(45,27,22,.35);
-    display: flex; align-items: center; justify-content: center;
-    transition: transform .2s ease, background .2s ease;
-}
-.btn-float-laporan:hover { transform: translateY(-3px); background: var(--primary-dark); }
-.btn-float-laporan .badge-count {
-    position: absolute; top: -4px; right: -4px;
-    background: #d93636; color: #fff;
-    font-size: 10px; font-weight: 700;
-    border-radius: 999px; padding: 3px 6px;
-}
-#laporanDrawer { --bs-offcanvas-width: 380px; }
-.laporan-item { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; background: #fff; }
-.laporan-item .head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
-.laporan-item .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; text-align: center; }
-.laporan-item .grid .v { font-weight: 700; font-size: 13px; }
-.laporan-item .grid .l { font-size: 10px; color: var(--muted); }
-</style>
 
 {{-- Tombol melayang --}}
 <button class="btn-float-laporan" type="button" data-bs-toggle="offcanvas"
@@ -4627,8 +5203,11 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
     @endif
 </button>
 
-{{-- Panel samping melayang --}}
-<div class="offcanvas offcanvas-end" tabindex="-1" id="laporanDrawer" aria-labelledby="laporanDrawerLabel">
+{{-- Panel berdampingan (tanpa backdrop, scroll aktif) --}}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="laporanDrawer"
+     aria-labelledby="laporanDrawerLabel"
+     data-bs-backdrop="false"
+     data-bs-scroll="true">
     <div class="offcanvas-header" style="background: var(--sidebar); color:#fff;">
         <h5 class="offcanvas-title fw-bold" id="laporanDrawerLabel">
             <i class="bi bi-clipboard2-data-fill me-2"></i>Laporan Harian Terbaru
@@ -4636,9 +5215,6 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
     <div class="offcanvas-body">
-        <p class="small text-muted mt-1 mb-3">
-            Panel ini bisa dibuka sambil input data di halaman mana pun.
-        </p>
 
         @forelse($laporanFloating as $lap)
             <div class="laporan-item">
@@ -4673,7 +5249,25 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
         </a>
     </div>
 </div>
+
+<script>
+(function () {
+    const drawer = document.getElementById('laporanDrawer');
+    const mainArea = document.getElementById('mainArea');
+    if (!drawer || !mainArea) return;
+
+    drawer.addEventListener('show.bs.offcanvas', () => {
+        mainArea.classList.add('drawer-open');
+        document.body.classList.add('drawer-open');
+    });
+    drawer.addEventListener('hide.bs.offcanvas', () => {
+        mainArea.classList.remove('drawer-open');
+        document.body.classList.remove('drawer-open');
+    });
+})();
+</script>
 @endif
+
 @include('partials.cursor-animation')
 </body>
 </html>
@@ -4868,19 +5462,19 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
     <div class="card-body p-4">
         <h5 class="fw-bold mb-1">Laporan Harian</h5>
         <p class="text-muted small mb-3">
-            Jumlah ayam <strong>dihitung otomatis</strong> jika sudah ada data.
-            Untuk <strong>input pertama kali</strong>, isi Populasi Awal secara manual.
+            Isikan data harian peternakan. Field berwarna <span class="badge bg-secondary">Otomatis</span> tidak perlu diisi manual.
         </p>
 
+        <!-- Panel info -->
         <div class="alert alert-info py-3 mb-4">
-            <div class="row text-center">
+            <div class="row text-center g-2">
                 <div class="col-4">
                     <div class="small text-muted">Populasi Terakhir</div>
                     <div class="fs-4 fw-bold" id="info-hidup">-</div>
                     <div class="small">ekor</div>
                 </div>
                 <div class="col-4">
-                    <div class="small text-muted">Perkiraan Sisa Setelah Laporan</div>
+                    <div class="small text-muted">Perkiraan Sisa</div>
                     <div class="fs-4 fw-bold text-success" id="info-sisa">-</div>
                     <div class="small">ekor</div>
                 </div>
@@ -4897,128 +5491,208 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
 
         <form action="{{ route('manpower.laporan.store') }}" method="POST">
             @csrf
-            <div class="row g-3">
-                <div class="col-6">
-                    <label class="form-label">Tanggal</label>
-                    <input type="date" name="tanggal" class="form-control"
-                        value="{{ old('tanggal', date('Y-m-d')) }}" required>
-                </div>
-                <div class="col-6">
-                    <label class="form-label">Kandang</label>
-                    <select name="kandang_id" class="form-select" required>
-                        <option value="">-- Pilih Kandang --</option>
-                        @foreach ($kandangs as $kandang)
-                            <option value="{{ $kandang->id }}" @selected(old('kandang_id') == $kandang->id)>
-                                {{ $kandang->nama }}
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
 
-                <div class="col-6">
-                    <label class="form-label">Populasi Awal (ekor)</label>
-                    <input type="number" name="hidup" id="input-hidup" class="form-control"
-                        value="{{ old('hidup', 0) }}" min="0" required>
-                    <div class="form-text" id="hint-hidup">
-                        Jumlah ayam saat ini — diisi manual hanya jika kandang belum punya data.
+            {{-- ===== SECTION 1: IDENTITAS ===== --}}
+            <div class="border-bottom pb-3 mb-3">
+                <div class="small fw-bold text-muted mb-2">
+                    <i class="bi bi-1-circle-fill me-1"></i> Identitas Laporan
+                </div>
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="form-label">Tanggal</label>
+                        <input type="date" name="tanggal" class="form-control"
+                            value="{{ old('tanggal', date('Y-m-d')) }}" required>
                     </div>
-                </div>
-                <div class="col-6">
-                    <label class="form-label">Umur Ayam (minggu)</label>
-                    <input type="number" name="umur_minggu" class="form-control"
-                        value="{{ old('umur_minggu') }}" min="0" required>
-                </div>
-
-                <div class="col-6">
-                    <label class="form-label">Mati (ekor)</label>
-                    <input type="number" name="mati" class="form-control" value="{{ old('mati', 0) }}" min="0" required>
-                </div>
-                <div class="col-6">
-                    <label class="form-label">Afkir (ekor)</label>
-                    <input type="number" name="afkir" class="form-control" value="{{ old('afkir', 0) }}" min="0" required>
-                </div>
-
-                <div class="col-6">
-                    <label class="form-label">Total Pakan (kg)</label>
-                    <input type="number" step="0.01" name="total_pakan" class="form-control"
-                        value="{{ old('total_pakan') }}" min="0" required>
-                </div>
-                <div class="col-6">
-                    <label class="form-label">Telur Bagus (butir)</label>
-                    <input type="number" name="produksi_telur" class="form-control"
-                        value="{{ old('produksi_telur', 0) }}" min="0" required>
-                </div>
-
-                <div class="col-6">
-                    <label class="form-label">Telur Pecah/Reject (butir)</label>
-                    <input type="number" name="telur_pecah" class="form-control"
-                        value="{{ old('telur_pecah', 0) }}" min="0" required>
-                </div>
-                <div class="col-12">
-                    <label class="form-label">Catatan (opsional)</label>
-                    <input type="text" name="column_10" class="form-control" value="{{ old('column_10') }}">
+                    <div class="col-6">
+                        <label class="form-label">Kandang</label>
+                        <select name="kandang_id" class="form-select" required>
+                            <option value="">-- Pilih Kandang --</option>
+                            @foreach ($kandangs as $kandang)
+                                <option value="{{ $kandang->id }}" @selected(old('kandang_id') == $kandang->id)>
+                                    {{ $kandang->nama }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
                 </div>
             </div>
 
+            {{-- ===== SECTION 2: POPULASI ===== --}}
+            <div class="border-bottom pb-3 mb-3">
+                <div class="small fw-bold text-muted mb-2">
+                    <i class="bi bi-2-circle-fill me-1"></i> Data Populasi
+                </div>
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="form-label">Populasi Awal (ekor)</label>
+                        <input type="number" name="hidup" id="input-hidup" class="form-control"
+                            value="{{ old('hidup', 0) }}" min="0" required>
+                        <div class="form-text" id="hint-hidup">
+                            Jumlah ayam saat ini — diisi manual hanya jika kandang belum punya data.
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">
+                            Umur Ayam (minggu)
+                            <span class="badge bg-secondary ms-1">Otomatis</span>
+                        </label>
+                        <input type="number" name="umur_minggu" id="input-umur" class="form-control bg-light"
+                            value="{{ old('umur_minggu', 0) }}" min="0" readonly required>
+                        <div class="form-text" id="hint-umur">
+                            Dihitung otomatis dari usia populasi (hari ÷ 7).
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Mati (ekor)</label>
+                        <input type="number" name="mati" class="form-control"
+                            value="{{ old('mati', 0) }}" min="0" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Afkir (ekor)</label>
+                        <input type="number" name="afkir" class="form-control"
+                            value="{{ old('afkir', 0) }}" min="0" required>
+                    </div>
+                </div>
+            </div>
+
+            {{-- ===== SECTION 3: PAKAN & PRODUKSI ===== --}}
+            <div class="border-bottom pb-3 mb-3">
+                <div class="small fw-bold text-muted mb-2">
+                    <i class="bi bi-3-circle-fill me-1"></i> Pakan & Produksi Telur
+                </div>
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label">Total Pakan (kg)</label>
+                        <input type="number" step="0.01" name="total_pakan" class="form-control"
+                            value="{{ old('total_pakan') }}" min="0" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Telur Bagus (butir)</label>
+                        <input type="number" name="produksi_telur" id="telur-bagus" class="form-control"
+                            value="{{ old('produksi_telur', 0) }}" min="0" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Telur Pecah / Reject (butir)</label>
+                        <input type="number" name="telur_pecah" id="telur-pecah" class="form-control"
+                            value="{{ old('telur_pecah', 0) }}" min="0" required>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">
+                            Total Produksi (butir)
+                            <span class="badge bg-secondary ms-1">Otomatis</span>
+                        </label>
+                        <input type="text" id="total-produksi" class="form-control bg-light fw-bold text-success"
+                            readonly value="0 butir">
+                        <div class="form-text">= Telur Bagus + Telur Pecah (otomatis)</div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- ===== SECTION 4: CATATAN ===== --}}
+            <div class="pb-3 mb-3">
+                <div class="small fw-bold text-muted mb-2">
+                    <i class="bi bi-4-circle-fill me-1"></i> Catatan Tambahan (opsional)
+                </div>
+                <input type="text" name="column_10" class="form-control"
+                    value="{{ old('column_10') }}"
+                    placeholder="Misal: cuaca mendung, ada gangguan predator, dll.">
+            </div>
+
             <div class="d-grid mt-4">
-                <button class="btn btn-success"><i class="bi bi-save me-1"></i>Simpan Laporan</button>
+                <button class="btn btn-success">
+                    <i class="bi bi-save me-1"></i> Simpan Laporan
+                </button>
             </div>
         </form>
     </div>
 </div>
 
 <script>
-    const POPULASI = @js($populasiTerakhir);
+const POPULASI = @js($populasiTerakhir);
+const TODAY    = @js($today);
 
-    function angka(el) {
-        return parseInt(el.value || 0, 10) || 0;
-    }
+function angka(el) {
+    return parseInt(el.value || 0, 10) || 0;
+}
 
-    function updateInfo() {
-        const kandangId  = document.querySelector('[name="kandang_id"]').value;
-        const data       = POPULASI[kandangId] || null; // null = belum ada data
-        const inputHidup = document.getElementById('input-hidup');
-        const hint       = document.getElementById('hint-hidup');
-        const ket        = document.getElementById('info-keterangan');
+function hariAntara(t1, t2) {
+    if (!t1 || !t2) return 0;
+    return Math.max(0, Math.round((new Date(t2) - new Date(t1)) / 86400000));
+}
 
-        if (data) {
-            inputHidup.value = data.sisa;
-            inputHidup.readOnly = true;
-            inputHidup.classList.add('bg-light', 'text-muted');
-            hint.textContent = 'Terisi otomatis dari sisa sebelumnya — tidak bisa diubah.';
-            ket.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>' +
-                'Kandang ini sudah punya data. Populasi awal mengikuti sisa sebelumnya.';
+function updateInfo() {
+    const kandangId  = document.querySelector('[name="kandang_id"]').value;
+    const data       = POPULASI[kandangId] || null;
+    const inputHidup = document.getElementById('input-hidup');
+    const inputUmur  = document.getElementById('input-umur');
+    const hintHidup  = document.getElementById('hint-hidup');
+    const hintUmur   = document.getElementById('hint-umur');
+    const ket        = document.getElementById('info-keterangan');
+
+    if (data) {
+        // Populasi otomatis
+        inputHidup.value = data.sisa;
+        inputHidup.readOnly = true;
+        inputHidup.classList.add('bg-light', 'text-muted');
+        hintHidup.textContent = 'Terisi otomatis dari sisa sebelumnya — tidak bisa diubah.';
+
+        // Usia otomatis (minggu)
+        const hariLalu   = hariAntara(data.tanggal_dasar, TODAY);
+        const usiaHari   = (data.usia_dasar || 0) + hariLalu;
+        const usiaMinggu = Math.floor(usiaHari / 7);
+        inputUmur.value  = usiaMinggu;
+        hintUmur.textContent = `Usia dasar ${data.usia_dasar || 0} hari + ${hariLalu} hari = ${usiaHari} hari (${usiaMinggu} minggu).`;
+
+        ket.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>' +
+            'Kandang ini sudah punya data. Populasi & usia otomatis.';
+    } else {
+        inputHidup.readOnly = false;
+        inputHidup.classList.remove('bg-light', 'text-muted');
+        inputUmur.value = 0;
+        inputUmur.readOnly = false;
+        inputUmur.classList.remove('bg-light', 'text-muted');
+
+        if (kandangId) {
+            hintHidup.textContent = 'Laporan pertama untuk kandang ini — isi jumlah ayam saat ini.';
+            hintUmur.textContent  = 'Belum ada data populasi — isi umur (minggu) manual.';
+            ket.innerHTML = '<i class="bi bi-exclamation-circle-fill me-1"></i>' +
+                'Belum ada data untuk kandang ini. Isi manual.';
         } else {
-            inputHidup.readOnly = false;
-            inputHidup.classList.remove('bg-light', 'text-muted');
-            if (kandangId) {
-                hint.textContent = 'Laporan pertama untuk kandang ini — isi jumlah ayam saat ini.';
-                ket.innerHTML = '<i class="bi bi-exclamation-circle-fill me-1"></i>' +
-                    'Belum ada data untuk kandang ini. Isi Populasi Awal secara manual.';
-            } else {
-                hint.textContent = 'Jumlah ayam saat ini — diisi manual hanya jika kandang belum punya data.';
-                ket.innerHTML = '<i class="bi bi-info-circle me-1"></i> Silakan pilih kandang terlebih dahulu.';
-            }
+            hintHidup.textContent = 'Jumlah ayam saat ini — diisi manual jika belum ada data.';
+            hintUmur.textContent  = 'Dihitung otomatis dari usia populasi (hari ÷ 7).';
+            ket.innerHTML = '<i class="bi bi-info-circle me-1"></i> Silakan pilih kandang terlebih dahulu.';
         }
-
-        const hidup = angka(inputHidup);
-        const mati  = angka(document.querySelector('[name="mati"]'));
-        const afkir = angka(document.querySelector('[name="afkir"]'));
-
-        document.getElementById('info-hidup').textContent =
-            data ? data.sisa.toLocaleString('id-ID')
-                 : (kandangId ? hidup.toLocaleString('id-ID') : '-');
-        document.getElementById('info-tanggal').textContent =
-            data && data.tanggal ? data.tanggal : '-';
-        document.getElementById('info-sisa').textContent =
-            kandangId ? Math.max(0, hidup - mati - afkir).toLocaleString('id-ID') : '-';
     }
 
-    document.querySelector('[name="kandang_id"]').addEventListener('change', updateInfo);
-    document.getElementById('input-hidup').addEventListener('input', updateInfo);
-    document.querySelector('[name="mati"]').addEventListener('input', updateInfo);
-    document.querySelector('[name="afkir"]').addEventListener('input', updateInfo);
-    updateInfo();
+    const hidup = angka(inputHidup);
+    const mati  = angka(document.querySelector('[name="mati"]'));
+    const afkir = angka(document.querySelector('[name="afkir"]'));
+
+    document.getElementById('info-hidup').textContent =
+        data ? data.sisa.toLocaleString('id-ID')
+             : (kandangId ? hidup.toLocaleString('id-ID') : '-');
+    document.getElementById('info-tanggal').textContent =
+        data && data.tanggal ? data.tanggal : '-';
+    document.getElementById('info-sisa').textContent =
+        kandangId ? Math.max(0, hidup - mati - afkir).toLocaleString('id-ID') : '-';
+}
+
+function hitungTotalProduksi() {
+    const bagus = angka(document.getElementById('telur-bagus'));
+    const pecah = angka(document.getElementById('telur-pecah'));
+    document.getElementById('total-produksi').value =
+        (bagus + pecah).toLocaleString('id-ID') + ' butir';
+}
+
+document.querySelector('[name="kandang_id"]').addEventListener('change', updateInfo);
+document.getElementById('input-hidup').addEventListener('input', updateInfo);
+document.querySelector('[name="mati"]').addEventListener('input', updateInfo);
+document.querySelector('[name="afkir"]').addEventListener('input', updateInfo);
+document.getElementById('telur-bagus').addEventListener('input', hitungTotalProduksi);
+document.getElementById('telur-pecah').addEventListener('input', hitungTotalProduksi);
+
+updateInfo();
+hitungTotalProduksi();
 </script>
 @endsection
 
@@ -5992,124 +6666,78 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
 <h2>Tambah Penjualan Telur</h2>
 
 <div class="card">
-<div class="card-body">
+    <div class="card-body">
+        <form action="{{ route('penjualan-telur.store') }}" method="POST">
+            @csrf
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label>Tanggal</label>
+                    <input type="date" name="tanggal" class="form-control"
+                        value="{{ old('tanggal') }}" required>
+                </div>
 
-<form
-    action="{{ route('penjualan-telur.store') }}"
-    method="POST"
->
-@csrf
+                <div class="col-md-6 mb-3">
+                    <label>Customer</label>
+                    <input type="text" name="customer" class="form-control"
+                        value="{{ old('customer') }}" required>
+                </div>
 
-<div class="row">
+                <div class="col-md-6 mb-3">
+                    <label>Produksi Telur</label>
+                    <select name="produksi_id" class="form-select" required>
+                        <option value="">-- Pilih Produksi --</option>
+                        @foreach($produksis as $produksi)
+                            <option value="{{ $produksi->id }}"
+                                @selected(old('produksi_id') == $produksi->id)>
+                                {{ $produksi->tanggal->format('d-m-Y') }} - {{ $produksi->kandang->nama ?? '-' }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
 
-    <div class="col-md-6 mb-3">
-        <label>Tanggal</label>
+                <div class="col-md-4 mb-3">
+                    <label>Jumlah (ikat)</label>
+                    <input type="number" name="jumlah" id="jumlah" class="form-control"
+                        value="{{ old('jumlah', 0) }}" min="1" required>
+                </div>
 
-        <input
-            type="date"
-            name="tanggal"
-            class="form-control"
-            value="{{ old('tanggal') }}"
-            required
-        >
+                <div class="col-md-4 mb-3">
+                    <label>Harga per ikat (Rp)</label>
+                    <input type="number" name="harga" id="harga" class="form-control"
+                        value="{{ old('harga', 0) }}" min="0" step="1" required>
+                </div>
+
+                <div class="col-md-4 mb-3">
+                    <label>Total (Rp)</label>
+                    <input type="text" id="total-display" class="form-control bg-light fw-bold" readonly value="Rp 0">
+                    <input type="hidden" name="total" id="total-input" value="0">
+                    <div class="form-text">= Jumlah ikat × Harga per ikat (otomatis)</div>
+                </div>
+            </div>
+
+            <button class="btn btn-primary">Simpan</button>
+            <a href="{{ route('penjualan-telur.index') }}" class="btn btn-secondary">Kembali</a>
+        </form>
     </div>
-
-    <div class="col-md-6 mb-3">
-        <label>Customer</label>
-
-        <input
-            type="text"
-            name="customer"
-            class="form-control"
-            value="{{ old('customer') }}"
-            required
-        >
-    </div>
-
-    <div class="col-md-6 mb-3">
-        <label>Produksi Telur</label>
-
-        <select name="produksi_id" class="form-select" required>
-
-            <option value="">
-                -- Pilih Produksi --
-            </option>
-
-            @foreach($produksis as $produksi)
-
-                <option
-                    value="{{ $produksi->id }}"
-                    @selected(old('produksi_id') == $produksi->id)
-                >
-                    {{ $produksi->tanggal->format('d-m-Y') }}
-                    -
-                    {{ $produksi->kandang->nama ?? '-' }}
-                </option>
-
-            @endforeach
-
-        </select>
-    </div>
-
-    <div class="col-md-6 mb-3">
-        <label>Jumlah</label>
-
-        <input
-            type="number"
-            name="jumlah"
-            class="form-control"
-            value="{{ old('jumlah', 0) }}"
-            min="1"
-            required
-        >
-    </div>
-
-    <div class="col-md-6 mb-3">
-        <label>Harga</label>
-
-        <input
-            type="number"
-            name="harga"
-            class="form-control"
-            value="{{ old('harga', 0) }}"
-            min="0"
-            step="0.01"
-            required
-        >
-    </div>
-
-    <div class="col-md-6 mb-3">
-        <label>Total</label>
-
-        <input
-            type="number"
-            name="total"
-            class="form-control"
-            value="{{ old('total', 0) }}"
-            min="0"
-            required
-        >
-    </div>
-
-</div>
-
-<button class="btn btn-primary">
-    Simpan
-</button>
-
-<a
-    href="{{ route('penjualan-telur.index') }}"
-    class="btn btn-secondary"
->
-    Kembali
-</a>
-
-</form>
-
-</div>
 </div>
 
 @endsection
+
+@push('scripts')
+<script>
+function formatRp(n) { return 'Rp ' + Number(n || 0).toLocaleString('id-ID'); }
+function hitungTotal() {
+    const j = parseInt(document.getElementById('jumlah').value || 0, 10) || 0;
+    const h = parseInt(document.getElementById('harga').value  || 0, 10) || 0;
+    const t = j * h;
+    document.getElementById('total-display').value = formatRp(t);
+    document.getElementById('total-input').value   = t;
+}
+document.getElementById('jumlah').addEventListener('input', hitungTotal);
+document.getElementById('harga').addEventListener('input', hitungTotal);
+hitungTotal();
+</script>
+@endpush
 
 
 ===== C:\xampp\htdocs\peternakan_ayam\resources\views\penjualan_telur\edit.blade.php =====
@@ -6122,104 +6750,80 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
 <h2>Edit Penjualan Telur</h2>
 
 <div class="card">
-<div class="card-body">
+    <div class="card-body">
+        <form action="{{ route('penjualan-telur.update', $penjualanTelur) }}" method="POST">
+            @csrf
+            @method('PUT')
 
-<form
-    action="{{ route('penjualan-telur.update', $penjualanTelur) }}"
-    method="POST"
->
-@csrf
-@method('PUT')
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label>Tanggal</label>
+                    <input type="date" name="tanggal" class="form-control"
+                        value="{{ old('tanggal', $penjualanTelur->tanggal->format('Y-m-d')) }}" required>
+                </div>
 
-<div class="row">
+                <div class="col-md-6 mb-3">
+                    <label>Customer</label>
+                    <input type="text" name="customer" class="form-control"
+                        value="{{ old('customer', $penjualanTelur->customer) }}" required>
+                </div>
 
-    <div class="col-md-6 mb-3">
-        <label>Tanggal</label>
+                <div class="col-md-6 mb-3">
+                    <label>Produksi Telur</label>
+                    <select name="produksi_id" class="form-select" required>
+                        <option value="">-- Pilih Produksi --</option>
+                        @foreach($produksis as $produksi)
+                            <option value="{{ $produksi->id }}"
+                                @selected(old('produksi_id', $penjualanTelur->produksi_id) == $produksi->id)>
+                                {{ $produksi->tanggal->format('d-m-Y') }} - {{ $produksi->kandang->nama ?? '-' }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
 
-        <input
-            type="date"
-            name="tanggal"
-            class="form-control"
-            value="{{ old('tanggal', $penjualanTelur->tanggal->format('Y-m-d')) }}"
-            required
-        >
+                <div class="col-md-4 mb-3">
+                    <label>Jumlah (ikat)</label>
+                    <input type="number" name="jumlah" id="jumlah" class="form-control"
+                        value="{{ old('jumlah', $penjualanTelur->jumlah) }}" min="1" required>
+                </div>
+
+                <div class="col-md-4 mb-3">
+                    <label>Harga per ikat (Rp)</label>
+                    <input type="number" name="harga" id="harga" class="form-control"
+                        value="{{ old('harga', $penjualanTelur->harga) }}" min="0" step="1" required>
+                </div>
+
+                <div class="col-md-4 mb-3">
+                    <label>Total (Rp)</label>
+                    <input type="text" id="total-display" class="form-control bg-light fw-bold" readonly value="Rp 0">
+                    <input type="hidden" name="total" id="total-input" value="{{ $penjualanTelur->total }}">
+                    <div class="form-text">= Jumlah ikat × Harga per ikat (otomatis)</div>
+                </div>
+            </div>
+
+            <button class="btn btn-primary">Update</button>
+            <a href="{{ route('penjualan-telur.index') }}" class="btn btn-secondary">Kembali</a>
+        </form>
     </div>
-
-    <div class="col-md-6 mb-3">
-        <label>Customer</label>
-
-        <input
-            type="text"
-            name="customer"
-            class="form-control"
-            value="{{ old('customer', $penjualanTelur->customer) }}"
-            required
-        >
-    </div>
-
-    <div class="col-md-6 mb-3">
-        <label>Produksi Telur</label>
-
-        <select name="produksi_id" class="form-select" required>
-
-            @foreach($produksis as $produksi)
-
-                <option
-                    value="{{ $produksi->id }}"
-                    @selected($penjualanTelur->produksi_id == $produksi->id)
-                >
-                    {{ $produksi->tanggal->format('d-m-Y') }}
-                    -
-                    {{ $produksi->kandang->nama ?? '-' }}
-                </option>
-
-            @endforeach
-
-        </select>
-    </div>
-
-    @foreach([
-        'jumlah' => 'Jumlah',
-        'harga' => 'Harga',
-        'total' => 'Total'
-    ] as $field => $label)
-
-        <div class="col-md-6 mb-3">
-
-            <label>{{ $label }}</label>
-
-            <input
-                type="number"
-                name="{{ $field }}"
-                class="form-control"
-                value="{{ old($field, $penjualanTelur->$field) }}"
-                min="0"
-                required
-            >
-
-        </div>
-
-    @endforeach
-
-</div>
-
-<button class="btn btn-primary">
-    Update
-</button>
-
-<a
-    href="{{ route('penjualan-telur.index') }}"
-    class="btn btn-secondary"
->
-    Kembali
-</a>
-
-</form>
-
-</div>
 </div>
 
 @endsection
+
+@push('scripts')
+<script>
+function formatRp(n) { return 'Rp ' + Number(n || 0).toLocaleString('id-ID'); }
+function hitungTotal() {
+    const j = parseInt(document.getElementById('jumlah').value || 0, 10) || 0;
+    const h = parseInt(document.getElementById('harga').value  || 0, 10) || 0;
+    const t = j * h;
+    document.getElementById('total-display').value = formatRp(t);
+    document.getElementById('total-input').value   = t;
+}
+document.getElementById('jumlah').addEventListener('input', hitungTotal);
+document.getElementById('harga').addEventListener('input', hitungTotal);
+hitungTotal();
+</script>
+@endpush
 
 
 ===== C:\xampp\htdocs\peternakan_ayam\resources\views\penjualan_telur\index.blade.php =====
@@ -6408,58 +7012,68 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
 @section('content')
 <h2>Tambah Populasi</h2>
 <div class="card">
-<div class="card-body">
-<form action="{{ route('populasi.store') }}" method="POST">
-@csrf
-<div class="mb-3">
-    <label>Tanggal</label>
-    <input type="date" name="tanggal" class="form-control" value="{{ old('tanggal') }}" required>
-</div>
-<div class="mb-3">
-    <label>Kandang</label>
-    <select name="kandang_id" class="form-select" required>
-        <option value="">-- Pilih Kandang --</option>
-        @foreach($kandangs as $kandang)
-        <option value="{{ $kandang->id }}" @selected(old('kandang_id') == $kandang->id)>{{ $kandang->nama }}</option>
-        @endforeach
-    </select>
-</div>
-<div class="row">
-    <div class="col-md-4 mb-3">
-        <label>Hidup</label>
-        <input type="number" name="hidup" class="form-control" value="{{ old('hidup', 0) }}" min="0" required>
+    <div class="card-body">
+        <form action="{{ route('populasi.store') }}" method="POST">
+            @csrf
+            <div class="mb-3">
+                <label>Tanggal</label>
+                <input type="date" name="tanggal" class="form-control"
+                    value="{{ old('tanggal', date('Y-m-d')) }}" required>
+            </div>
+            <div class="mb-3">
+                <label>Kandang</label>
+                <select name="kandang_id" class="form-select" required>
+                    <option value="">-- Pilih Kandang --</option>
+                    @foreach($kandangs as $kandang)
+                        <option value="{{ $kandang->id }}" @selected(old('kandang_id') == $kandang->id)>
+                            {{ $kandang->nama }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label>Hidup</label>
+                    <input type="number" name="hidup" class="form-control"
+                        value="{{ old('hidup', 0) }}" min="0" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label>Mati</label>
+                    <input type="number" name="mati" class="form-control"
+                        value="{{ old('mati', 0) }}" min="0" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label>Afkir</label>
+                    <input type="number" name="afkir" class="form-control"
+                        value="{{ old('afkir', 0) }}" min="0" required>
+                    <div class="form-text text-muted">Hanya dicatat, tidak mengurangi sisa.</div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label>Sisa (otomatis)</label>
+                    <input type="number" id="sisa" name="sisa"
+                        class="form-control bg-light fw-bold text-success"
+                        readonly value="{{ old('sisa', 0) }}">
+                    <div class="form-text">= Hidup − Mati (afkir tidak ikut dihitung)</div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label>Usia (minggu)</label>
+                    <input type="number" name="umur_minggu" class="form-control"
+                        value="{{ old('umur_minggu', 0) }}" min="0" required>
+                    <div class="form-text">Contoh: 12 = 12 minggu (≈ 84 hari)</div>
+                </div>
+            </div>
+            <button class="btn btn-primary">Simpan</button>
+            <a href="{{ route('populasi.index') }}" class="btn btn-secondary">Kembali</a>
+        </form>
     </div>
-    <div class="col-md-4 mb-3">
-        <label>Mati</label>
-        <input type="number" name="mati" class="form-control" value="{{ old('mati', 0) }}" min="0" required>
-    </div>
-    <div class="col-md-4 mb-3">
-        <label>Afkir</label>
-        <input type="number" name="afkir" class="form-control" value="{{ old('afkir', 0) }}" min="0" required>
-    </div>
-    <div class="col-md-6 mb-3">
-        <label>Sisa (otomatis)</label>
-        <input type="number" id="sisa" name="sisa" class="form-control" readonly value="{{ old('sisa', 0) }}">
-        <div class="form-text">Sisa = Hidup − Mati − Afkir (dihitung otomatis)</div>
-    </div>
-    <div class="col-md-6 mb-3">
-        <label>Usia (hari)</label>
-        <input type="number" name="usia" class="form-control" value="{{ old('usia', 0) }}" min="0" required>
-    </div>
-</div>
-<button class="btn btn-primary">Simpan</button>
-<a href="{{ route('populasi.index') }}" class="btn btn-secondary">Kembali</a>
-</form>
-</div>
 </div>
 <script>
 function hitungSisa() {
     const hidup = parseInt(document.querySelector('[name="hidup"]').value || 0, 10) || 0;
-    const mati  = parseInt(document.querySelector('[name="mati"]').value || 0, 10) || 0;
-    const afkir = parseInt(document.querySelector('[name="afkir"]').value || 0, 10) || 0;
-    document.getElementById('sisa').value = Math.max(0, hidup - mati - afkir);
+    const mati  = parseInt(document.querySelector('[name="mati"]').value  || 0, 10) || 0;
+    document.getElementById('sisa').value = Math.max(0, hidup - mati);
 }
-['hidup', 'mati', 'afkir'].forEach(n =>
+['hidup', 'mati'].forEach(n =>
     document.querySelector('[name="' + n + '"]').addEventListener('input', hitungSisa));
 hitungSisa();
 </script>
@@ -6471,58 +7085,68 @@ hitungSisa();
 @section('title', 'Edit Populasi')
 @section('content')
 <div class="card">
-<div class="card-body">
-<form action="{{ route('populasi.update', $populasi) }}" method="POST">
-@csrf
-@method('PUT')
-<div class="mb-3">
-    <label>Tanggal</label>
-    <input type="date" name="tanggal" class="form-control" value="{{ old('tanggal', $populasi->tanggal->format('Y-m-d')) }}" required>
-</div>
-<div class="mb-3">
-    <label>Kandang</label>
-    <select name="kandang_id" class="form-select" required>
-        @foreach($kandangs as $kandang)
-        <option value="{{ $kandang->id }}" @selected($populasi->kandang_id == $kandang->id)>{{ $kandang->nama }}</option>
-        @endforeach
-    </select>
-</div>
-<div class="row">
-    <div class="col-md-4 mb-3">
-        <label>Hidup</label>
-        <input type="number" name="hidup" class="form-control" value="{{ old('hidup', $populasi->hidup) }}" min="0" required>
+    <div class="card-body">
+        <form action="{{ route('populasi.update', $populasi) }}" method="POST">
+            @csrf
+            @method('PUT')
+            <div class="mb-3">
+                <label>Tanggal</label>
+                <input type="date" name="tanggal" class="form-control"
+                    value="{{ old('tanggal', $populasi->tanggal->format('Y-m-d')) }}" required>
+            </div>
+            <div class="mb-3">
+                <label>Kandang</label>
+                <select name="kandang_id" class="form-select" required>
+                    @foreach($kandangs as $kandang)
+                        <option value="{{ $kandang->id }}" @selected($populasi->kandang_id == $kandang->id)>
+                            {{ $kandang->nama }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label>Hidup</label>
+                    <input type="number" name="hidup" class="form-control"
+                        value="{{ old('hidup', $populasi->hidup) }}" min="0" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label>Mati</label>
+                    <input type="number" name="mati" class="form-control"
+                        value="{{ old('mati', $populasi->mati) }}" min="0" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label>Afkir</label>
+                    <input type="number" name="afkir" class="form-control"
+                        value="{{ old('afkir', $populasi->afkir) }}" min="0" required>
+                    <div class="form-text text-muted">Hanya dicatat, tidak mengurangi sisa.</div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label>Sisa (otomatis)</label>
+                    <input type="number" id="sisa" name="sisa"
+                        class="form-control bg-light fw-bold text-success"
+                        readonly value="{{ old('sisa', $populasi->sisa) }}">
+                    <div class="form-text">= Hidup − Mati (afkir tidak ikut dihitung)</div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label>Usia (minggu)</label>
+                    <input type="number" name="umur_minggu" class="form-control"
+                        value="{{ old('umur_minggu', intdiv((int)$populasi->usia, 7)) }}" min="0" required>
+                    <div class="form-text">Contoh: 12 = 12 minggu (≈ 84 hari)</div>
+                </div>
+            </div>
+            <button class="btn btn-primary">Update</button>
+            <a href="{{ route('populasi.index') }}" class="btn btn-secondary">Kembali</a>
+        </form>
     </div>
-    <div class="col-md-4 mb-3">
-        <label>Mati</label>
-        <input type="number" name="mati" class="form-control" value="{{ old('mati', $populasi->mati) }}" min="0" required>
-    </div>
-    <div class="col-md-4 mb-3">
-        <label>Afkir</label>
-        <input type="number" name="afkir" class="form-control" value="{{ old('afkir', $populasi->afkir) }}" min="0" required>
-    </div>
-    <div class="col-md-6 mb-3">
-        <label>Sisa (otomatis)</label>
-        <input type="number" id="sisa" name="sisa" class="form-control" readonly value="{{ old('sisa', $populasi->sisa) }}">
-        <div class="form-text">Sisa = Hidup − Mati − Afkir (dihitung otomatis)</div>
-    </div>
-    <div class="col-md-6 mb-3">
-        <label>Usia (hari)</label>
-        <input type="number" name="usia" class="form-control" value="{{ old('usia', $populasi->usia) }}" min="0" required>
-    </div>
-</div>
-<button class="btn btn-primary">Update</button>
-<a href="{{ route('populasi.index') }}" class="btn btn-secondary">Kembali</a>
-</form>
-</div>
 </div>
 <script>
 function hitungSisa() {
     const hidup = parseInt(document.querySelector('[name="hidup"]').value || 0, 10) || 0;
-    const mati  = parseInt(document.querySelector('[name="mati"]').value || 0, 10) || 0;
-    const afkir = parseInt(document.querySelector('[name="afkir"]').value || 0, 10) || 0;
-    document.getElementById('sisa').value = Math.max(0, hidup - mati - afkir);
+    const mati  = parseInt(document.querySelector('[name="mati"]').value  || 0, 10) || 0;
+    document.getElementById('sisa').value = Math.max(0, hidup - mati);
 }
-['hidup', 'mati', 'afkir'].forEach(n =>
+['hidup', 'mati'].forEach(n =>
     document.querySelector('[name="' + n + '"]').addEventListener('input', hitungSisa));
 hitungSisa();
 </script>
@@ -6531,24 +7155,15 @@ hitungSisa();
 
 ===== C:\xampp\htdocs\peternakan_ayam\resources\views\populasi\index.blade.php =====
 @extends('layouts.app')
-
 @section('title', 'Data Populasi')
-
 @section('content')
-
 <div class="d-flex justify-content-between mb-3">
     <h2>Data Populasi</h2>
-
-    <a href="{{ route('populasi.create') }}" class="btn btn-primary">
-        + Tambah Populasi
-    </a>
+    <a href="{{ route('populasi.create') }}" class="btn btn-primary">+ Tambah Populasi</a>
 </div>
-
 <div class="card">
     <div class="card-body">
-
         <table class="table table-bordered table-striped">
-
             <thead>
                 <tr>
                     <th>Tanggal</th>
@@ -6561,143 +7176,71 @@ hitungSisa();
                     <th>Aksi</th>
                 </tr>
             </thead>
-
             <tbody>
-
                 @forelse($populasis as $populasi)
-
                     <tr>
                         <td>{{ $populasi->tanggal->format('d-m-Y') }}</td>
-
-                        <td>
-                            {{ $populasi->kandang->nama ?? '-' }}
-                        </td>
-
+                        <td>{{ $populasi->kandang->nama ?? '-' }}</td>
                         <td>{{ $populasi->hidup }}</td>
                         <td>{{ $populasi->mati }}</td>
                         <td>{{ $populasi->afkir }}</td>
-                        <td>{{ $populasi->sisa }}</td>
-                        <td>{{ $populasi->usia }} hari</td>
-
+                        <td class="fw-bold text-success">{{ $populasi->sisa }}</td>
                         <td>
-                            <a
-                                href="{{ route('populasi.show', $populasi) }}"
-                                class="btn btn-sm btn-info"
-                            >
-                                Detail
-                            </a>
-
-                            <a
-                                href="{{ route('populasi.edit', $populasi) }}"
-                                class="btn btn-sm btn-warning"
-                            >
-                                Edit
-                            </a>
-
-                            <form
-                                action="{{ route('populasi.destroy', $populasi) }}"
-                                method="POST"
-                                class="d-inline"
-                            >
+                            <span class="badge bg-warning text-dark">
+                                {{ intdiv((int)$populasi->usia, 7) }} minggu
+                            </span>
+                            <small class="text-muted d-block">({{ $populasi->usia }} hari)</small>
+                        </td>
+                        <td>
+                            <a href="{{ route('populasi.show', $populasi) }}" class="btn btn-sm btn-info">Detail</a>
+                            <a href="{{ route('populasi.edit', $populasi) }}" class="btn btn-sm btn-warning">Edit</a>
+                            <form action="{{ route('populasi.destroy', $populasi) }}" method="POST" class="d-inline">
                                 @csrf
                                 @method('DELETE')
-
-                                <button
-                                    class="btn btn-sm btn-danger"
-                                    onclick="return confirm('Hapus data?')"
-                                >
-                                    Hapus
-                                </button>
+                                <button class="btn btn-sm btn-danger"
+                                    onclick="return confirm('Hapus data?')">Hapus</button>
                             </form>
                         </td>
                     </tr>
-
                 @empty
-
                     <tr>
-                        <td colspan="8" class="text-center">
-                            Belum ada data populasi.
-                        </td>
+                        <td colspan="8" class="text-center">Belum ada data populasi.</td>
                     </tr>
-
                 @endforelse
-
             </tbody>
-
         </table>
-
     </div>
 </div>
-
 @endsection
 
 
 ===== C:\xampp\htdocs\peternakan_ayam\resources\views\populasi\show.blade.php =====
 @extends('layouts.app')
-
 @section('title', 'Detail Populasi')
-
 @section('content')
-
 <div class="card">
     <div class="card-body">
-
         <table class="table">
-
-            <tr>
-                <th>Tanggal</th>
-                <td>{{ $populasi->tanggal->format('d-m-Y') }}</td>
-            </tr>
-
-            <tr>
-                <th>Kandang</th>
-                <td>{{ $populasi->kandang->nama ?? '-' }}</td>
-            </tr>
-
-            <tr>
-                <th>Hidup</th>
-                <td>{{ $populasi->hidup }}</td>
-            </tr>
-
-            <tr>
-                <th>Mati</th>
-                <td>{{ $populasi->mati }}</td>
-            </tr>
-
-            <tr>
-                <th>Afkir</th>
-                <td>{{ $populasi->afkir }}</td>
-            </tr>
-
-            <tr>
-                <th>Sisa</th>
-                <td>{{ $populasi->sisa }}</td>
-            </tr>
-
+            <tr><th>Tanggal</th><td>{{ $populasi->tanggal->format('d-m-Y') }}</td></tr>
+            <tr><th>Kandang</th><td>{{ $populasi->kandang->nama ?? '-' }}</td></tr>
+            <tr><th>Hidup</th><td>{{ $populasi->hidup }} ekor</td></tr>
+            <tr><th>Mati</th><td>{{ $populasi->mati }} ekor</td></tr>
+            <tr><th>Afkir</th><td>{{ $populasi->afkir }} ekor</td></tr>
+            <tr><th>Sisa</th><td class="fw-bold text-success">{{ $populasi->sisa }} ekor</td></tr>
             <tr>
                 <th>Usia</th>
-                <td>{{ $populasi->usia }} hari</td>
+                <td>
+                    <span class="badge bg-warning text-dark fs-6">
+                        {{ intdiv((int)$populasi->usia, 7) }} minggu
+                    </span>
+                    <small class="text-muted ms-2">({{ $populasi->usia }} hari)</small>
+                </td>
             </tr>
-
         </table>
-
-        <a
-            href="{{ route('populasi.edit', $populasi) }}"
-            class="btn btn-warning"
-        >
-            Edit
-        </a>
-
-        <a
-            href="{{ route('populasi.index') }}"
-            class="btn btn-secondary"
-        >
-            Kembali
-        </a>
-
+        <a href="{{ route('populasi.edit', $populasi) }}" class="btn btn-warning">Edit</a>
+        <a href="{{ route('populasi.index') }}" class="btn btn-secondary">Kembali</a>
     </div>
 </div>
-
 @endsection
 
 

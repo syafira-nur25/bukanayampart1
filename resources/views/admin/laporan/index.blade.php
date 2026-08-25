@@ -98,6 +98,14 @@
                     </td>
                 </tr>
                 @endforelse
+                <tfoot>
+                    <tr class="table-active fw-bold">
+                        <td colspan="8" class="text-end">TOTAL:</td>
+                        <td>{{ number_format($laporan->sum('produksi_telur')) }}</td>
+                        <td>{{ number_format($laporan->sum('telur_pecah')) }}</td>
+                        <td colspan="3"></td>
+                    </tr>
+                </tfoot>   
             </tbody>
         </table>
     </div>

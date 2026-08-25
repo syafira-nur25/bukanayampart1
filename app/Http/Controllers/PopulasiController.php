@@ -23,16 +23,17 @@ class PopulasiController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'tanggal'    => 'required|date',
-            'hidup'      => 'required|integer|min:0',
-            'mati'       => 'required|integer|min:0',
-            'afkir'      => 'required|integer|min:0',
-            'usia'       => 'required|integer|min:0',
-            'kandang_id' => 'required|exists:kandang,id',
+            'tanggal'      => 'required|date',
+            'hidup'        => 'required|integer|min:0',
+            'mati'         => 'required|integer|min:0',
+            'afkir'        => 'required|integer|min:0',
+            'umur_minggu'  => 'required|integer|min:0',
+            'kandang_id'   => 'required|exists:kandang,id',
         ]);
 
-        // SISA OTOMATIS = hidup - mati - afkir
-        $validated['sisa'] = max(0, $validated['hidup'] - $validated['mati'] - $validated['afkir']);
+        $validated['sisa'] = max(0, $validated['hidup'] - $validated['mati']);
+        $validated['usia'] = $validated['umur_minggu'] * 7;
+        unset($validated['umur_minggu']);
 
         Populasi::create($validated);
 
@@ -55,15 +56,17 @@ class PopulasiController extends Controller
     public function update(Request $request, Populasi $populasi)
     {
         $validated = $request->validate([
-            'tanggal'    => 'required|date',
-            'hidup'      => 'required|integer|min:0',
-            'mati'       => 'required|integer|min:0',
-            'afkir'      => 'required|integer|min:0',
-            'usia'       => 'required|integer|min:0',
-            'kandang_id' => 'required|exists:kandang,id',
+            'tanggal'      => 'required|date',
+            'hidup'        => 'required|integer|min:0',
+            'mati'         => 'required|integer|min:0',
+            'afkir'        => 'required|integer|min:0',
+            'umur_minggu'  => 'required|integer|min:0',
+            'kandang_id'   => 'required|exists:kandang,id',
         ]);
 
-        $validated['sisa'] = max(0, $validated['hidup'] - $validated['mati'] - $validated['afkir']);
+        $validated['sisa'] = max(0, $validated['hidup'] - $validated['mati']);
+        $validated['usia'] = $validated['umur_minggu'] * 7;
+        unset($validated['umur_minggu']);
 
         $populasi->update($validated);
 

@@ -9,6 +9,8 @@ use App\Http\Controllers\PakanKandangController;
 use App\Http\Controllers\PemberianPakanController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Manpower\LaporanHarianController;
+use App\Http\Controllers\BobotAyamController;
+use App\Http\Controllers\ArusKasController;
 
 // LANDING PAGE (publik)
 Route::get('/', function () {
@@ -21,18 +23,27 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
 
     Route::resource('kandang', KandangController::class);
     Route::resource('populasi', PopulasiController::class);
+    Route::resource('bobot', BobotAyamController::class);
     Route::resource('produksi-telur', ProduksiTelurController::class);
     Route::resource('penjualan-telur', PenjualanTelurController::class);
     Route::resource('pemberian-pakan', PemberianPakanController::class);
     Route::resource('pakan-kandang', PakanKandangController::class);
 
-Route::get('/laporan-pakan', [PakanKandangController::class, 'laporan'])->name('pakan.laporan');
-Route::get('/laporan-pakan/export', [PakanKandangController::class, 'exportExcel'])->name('pakan.laporan.export'); // <-- BARU
+    // Laporan Pakan
+    Route::get('/laporan-pakan', [PakanKandangController::class, 'laporan'])->name('pakan.laporan');
+    Route::get('/laporan-pakan/export', [PakanKandangController::class, 'exportExcel'])->name('pakan.laporan.export');
+
+    // Arus Kas
+    // Catatan: Route custom seperti /export HARUS diletakkan SEBELUM Route::resource
+    // agar tidak ditangkap sebagai parameter {arusKas}
+    Route::get('/arus-kas/export', [ArusKasController::class, 'exportExcel'])->name('arus-kas.export');
+    Route::resource('arus-kas', ArusKasController::class)
+        ->parameters(['arus-kas' => 'arusKas']); // <-- biar parameternya {arusKas}, bukan {arus_ka}
+
     // Laporan harian (rekap kiriman man power)
     Route::get('/admin/laporan', [LaporanHarianController::class, 'index'])->name('admin.laporan.index');
 
     // Export Excel (aktifkan kalau method exportExcel sudah ada di controller)
-    // Route::get('/laporan-pakan/export', [PakanKandangController::class, 'exportExcel'])->name('pakan.laporan.export');
     // Route::get('/admin/laporan/export', [LaporanHarianController::class, 'exportExcel'])->name('admin.laporan.export');
 });
 
