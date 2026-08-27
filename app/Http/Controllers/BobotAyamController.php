@@ -8,21 +8,23 @@ use Illuminate\Http\Request;
 
 class BobotAyamController extends Controller
 {
-    public function index()
+public function index()
     {
         $kandangs = Kandang::orderBy('id')->get();
         $tanggals = BobotAyam::select('tanggal')->distinct()->orderBy('tanggal')->get();
 
-        // grouping: kandang_id -> tanggal -> [list sample]
-        $grouped = BobotAyam::orderBy('tanggal')->get()
+        // ✅ orderBy('id') + values() → key di-reset jadi 0,1,2...
+        //    sehingga nomor sampel berurutan #1, #2, #3
+        $grouped = BobotAyam::orderBy('tanggal')->orderBy('id')->get()
             ->groupBy('kandang_id')
-            ->map(fn ($items) => $items->groupBy(fn ($b) => $b->tanggal->toDateString()));
+            ->map(fn ($items) => $items
+                ->groupBy(fn ($b) => $b->tanggal->toDateString())
+                ->map(fn ($grup) => $grup->values()));
 
         $rows = [];
         foreach ($kandangs as $kandang) {
             $map = $grouped->get($kandang->id, collect());
 
-            // "terbaru" = daftar sampel di tanggal paling akhir kandang ini
             $tanggalTerbaru = $map->keys()->sort()->last();
             $sampelTerbaru  = $tanggalTerbaru ? $map->get($tanggalTerbaru) : collect();
 
@@ -40,11 +42,10 @@ class BobotAyamController extends Controller
         $latestAvgs = collect($rows)
             ->filter(fn ($r) => $r['rataTerbaru'] !== null)
             ->pluck('rataTerbaru');
-
         $totalBobot = $latestAvgs->sum();
         $rataRata   = $latestAvgs->count() ? round($latestAvgs->avg()) : 0;
 
-        // Per-tanggal: total & rata-rata per kolom (rata-rata dari rata-rata tiap kandang)
+        // Per-tanggal: total & rata-rata per kolom
         $perTanggal = [];
         foreach ($tanggals as $t) {
             $key = $t->tanggal->toDateString();

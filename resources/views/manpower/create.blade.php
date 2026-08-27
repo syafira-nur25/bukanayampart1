@@ -6,21 +6,30 @@
 <div class="card border-0 shadow-sm">
     <div class="card-body p-4">
         <h5 class="fw-bold mb-1">Laporan Harian</h5>
+        <p class="text-muted small mb-3">
+            Data populasi diambil <strong>otomatis dari input admin</strong>.
+            Anda cukup mengisi data harian (mati, afkir, pakan, telur).
+        </p>
 
-        <!-- Panel info -->
+        <!-- PANEL INFO POPULASI ADMIN -->
         <div class="alert alert-info py-3 mb-4">
             <div class="row text-center g-2">
-                <div class="col-4">
-                    <div class="small text-muted">Populasi Terakhir</div>
+                <div class="col-3">
+                    <div class="small text-muted">Populasi (admin)</div>
                     <div class="fs-4 fw-bold" id="info-hidup">-</div>
                     <div class="small">ekor</div>
                 </div>
-                <div class="col-4">
+                <div class="col-3">
                     <div class="small text-muted">Perkiraan Sisa</div>
                     <div class="fs-4 fw-bold text-success" id="info-sisa">-</div>
                     <div class="small">ekor</div>
                 </div>
-                <div class="col-4">
+                <div class="col-3">
+                    <div class="small text-muted">Usia</div>
+                    <div class="fs-4 fw-bold" id="info-usia">-</div>
+                    <div class="small">minggu</div>
+                </div>
+                <div class="col-3">
                     <div class="small text-muted">Data Per Tanggal</div>
                     <div class="fw-bold" id="info-tanggal">-</div>
                     <div class="small">&nbsp;</div>
@@ -63,14 +72,15 @@
             <div class="border-bottom pb-3 mb-3">
                 <div class="small fw-bold text-muted mb-2">
                     <i class="bi bi-2-circle-fill me-1"></i> Data Populasi
+                    <span class="badge bg-secondary ms-1">Dari data admin</span>
                 </div>
                 <div class="row g-3">
                     <div class="col-6">
                         <label class="form-label">Populasi Awal (ekor)</label>
-                        <input type="number" name="hidup" id="input-hidup" class="form-control"
-                            value="{{ old('hidup', 0) }}" min="0" required>
+                        <input type="number" name="hidup" id="input-hidup" class="form-control bg-light"
+                            value="{{ old('hidup', 0) }}" min="0" readonly required>
                         <div class="form-text" id="hint-hidup">
-                            Jumlah ayam saat ini — diisi manual hanya jika kandang belum punya data.
+                            Diambil otomatis dari data populasi admin.
                         </div>
                     </div>
                     <div class="col-6">
@@ -81,7 +91,7 @@
                         <input type="number" name="umur_minggu" id="input-umur" class="form-control bg-light"
                             value="{{ old('umur_minggu', 0) }}" min="0" readonly required>
                         <div class="form-text" id="hint-umur">
-                            Dihitung otomatis dari usia populasi (hari ÷ 7).
+                            Dihitung otomatis dari usia populasi admin.
                         </div>
                     </div>
                     <div class="col-6">
@@ -93,6 +103,7 @@
                         <label class="form-label">Afkir (ekor)</label>
                         <input type="number" name="afkir" class="form-control"
                             value="{{ old('afkir', 0) }}" min="0" required>
+                        <div class="form-text text-muted">Hanya dicatat, tidak mengurangi sisa.</div>
                     </div>
                 </div>
             </div>
@@ -172,51 +183,58 @@ function updateInfo() {
     const ket        = document.getElementById('info-keterangan');
 
     if (data) {
-        // Populasi otomatis
-        inputHidup.value = data.sisa;
+        // ✅ Populasi awal = sisa dari data admin
+        inputHidup.value    = data.sisa;
         inputHidup.readOnly = true;
         inputHidup.classList.add('bg-light', 'text-muted');
-        hintHidup.textContent = 'Terisi otomatis dari sisa sebelumnya — tidak bisa diubah.';
+        hintHidup.textContent = 'Otomatis dari data populasi admin (sisa: ' + data.sisa.toLocaleString('id-ID') + ' ekor).';
 
-        // Usia otomatis (minggu)
+        // ✅ Usia otomatis (minggu) dari data admin
         const hariLalu   = hariAntara(data.tanggal_dasar, TODAY);
         const usiaHari   = (data.usia_dasar || 0) + hariLalu;
         const usiaMinggu = Math.floor(usiaHari / 7);
         inputUmur.value  = usiaMinggu;
-        hintUmur.textContent = `Usia dasar ${data.usia_dasar || 0} hari + ${hariLalu} hari = ${usiaHari} hari (${usiaMinggu} minggu).`;
+        inputUmur.readOnly = true;
+        inputUmur.classList.add('bg-light', 'text-muted');
+        hintUmur.textContent = 'Usia dasar ' + (data.usia_dasar || 0) + ' hari + ' + hariLalu + ' hari = ' + usiaHari + ' hari (' + usiaMinggu + ' minggu).';
 
-        ket.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>' +
-            'Kandang ini sudah punya data. Populasi & usia otomatis.';
+        ket.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i>' +
+            'Data populasi dari admin berhasil dimuat. Populasi & usia bersifat <strong>read-only</strong>.';
+
+        // Info panel
+        document.getElementById('info-hidup').textContent   = data.sisa.toLocaleString('id-ID');
+        document.getElementById('info-usia').textContent     = usiaMinggu;
+        document.getElementById('info-tanggal').textContent  = data.tanggal;
+
     } else {
+        // Belum ada data admin → input manual
         inputHidup.readOnly = false;
         inputHidup.classList.remove('bg-light', 'text-muted');
-        inputUmur.value = 0;
-        inputUmur.readOnly = false;
+        inputUmur.readOnly  = false;
         inputUmur.classList.remove('bg-light', 'text-muted');
+        inputUmur.value = 0;
 
         if (kandangId) {
-            hintHidup.textContent = 'Laporan pertama untuk kandang ini — isi jumlah ayam saat ini.';
-            hintUmur.textContent  = 'Belum ada data populasi — isi umur (minggu) manual.';
-            ket.innerHTML = '<i class="bi bi-exclamation-circle-fill me-1"></i>' +
-                'Belum ada data untuk kandang ini. Isi manual.';
+            hintHidup.textContent = 'Admin belum input populasi untuk kandang ini — isi manual.';
+            hintUmur.textContent  = 'Admin belum input populasi — isi umur (minggu) manual.';
+            ket.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>' +
+                'Belum ada data populasi dari admin untuk kandang ini. Hubungi admin atau isi manual.';
         } else {
-            hintHidup.textContent = 'Jumlah ayam saat ini — diisi manual jika belum ada data.';
-            hintUmur.textContent  = 'Dihitung otomatis dari usia populasi (hari ÷ 7).';
+            hintHidup.textContent = 'Diambil otomatis dari data populasi admin.';
+            hintUmur.textContent  = 'Dihitung otomatis dari usia populasi admin.';
             ket.innerHTML = '<i class="bi bi-info-circle me-1"></i> Silakan pilih kandang terlebih dahulu.';
         }
+
+        document.getElementById('info-hidup').textContent   = '-';
+        document.getElementById('info-usia').textContent     = '-';
+        document.getElementById('info-tanggal').textContent  = '-';
     }
 
+    // Hitung perkiraan sisa
     const hidup = angka(inputHidup);
     const mati  = angka(document.querySelector('[name="mati"]'));
-    const afkir = angka(document.querySelector('[name="afkir"]'));
-
-    document.getElementById('info-hidup').textContent =
-        data ? data.sisa.toLocaleString('id-ID')
-             : (kandangId ? hidup.toLocaleString('id-ID') : '-');
-    document.getElementById('info-tanggal').textContent =
-        data && data.tanggal ? data.tanggal : '-';
     document.getElementById('info-sisa').textContent =
-        kandangId ? Math.max(0, hidup - mati - afkir).toLocaleString('id-ID') : '-';
+        kandangId ? Math.max(0, hidup - mati).toLocaleString('id-ID') : '-';
 }
 
 function hitungTotalProduksi() {
@@ -226,6 +244,7 @@ function hitungTotalProduksi() {
         (bagus + pecah).toLocaleString('id-ID') + ' butir';
 }
 
+// Event listeners
 document.querySelector('[name="kandang_id"]').addEventListener('change', updateInfo);
 document.getElementById('input-hidup').addEventListener('input', updateInfo);
 document.querySelector('[name="mati"]').addEventListener('input', updateInfo);
@@ -233,6 +252,7 @@ document.querySelector('[name="afkir"]').addEventListener('input', updateInfo);
 document.getElementById('telur-bagus').addEventListener('input', hitungTotalProduksi);
 document.getElementById('telur-pecah').addEventListener('input', hitungTotalProduksi);
 
+// Init
 updateInfo();
 hitungTotalProduksi();
 </script>

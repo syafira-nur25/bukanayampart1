@@ -91,7 +91,7 @@
                                 @php $list = $row['map']->get($t->tanggal->toDateString()); @endphp
                                 <td class="sample-cell">
                                     @if ($list && $list->count())
-                                        @foreach ($list as $idx => $b)
+                                        @foreach ($list->values() as $idx => $b)
                                             <div class="sample-item">
                                                 <span class="idx">#{{ $idx + 1 }}</span>
                                                 <span>{{ number_format($b->bobot) }} g</span>

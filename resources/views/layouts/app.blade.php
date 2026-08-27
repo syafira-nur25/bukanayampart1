@@ -44,6 +44,10 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 
 /* ===== MAIN ===== */
 .main { margin-left: var(--sidebar-width); min-height: 100vh; transition: margin-left .3s ease, width .35s ease; width: calc(100% - var(--sidebar-width)); }
+
+/* ✅ PERBAIKAN: efek terbelah saat drawer laporan dibuka */
+.main.drawer-open { width: calc(100% - var(--sidebar-width) - var(--drawer-width)); }
+
 .topbar { height: 75px; background: white; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 30px; gap: 12px; position: sticky; top: 0; z-index: 900; }
 .topbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .page-title { font-size: 18px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -282,22 +286,20 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
     function isMobile() { return window.innerWidth < 992; }
 
     if (btn) btn.addEventListener('click', function () {
-        if (isMobile()) document.body.classList.toggle('sidebar-open');   // HP: buka/tutup geser
-        else            document.body.classList.toggle('sidebar-collapsed'); // Desktop: collapse
+        if (isMobile()) document.body.classList.toggle('sidebar-open');
+        else            document.body.classList.toggle('sidebar-collapsed');
     });
 
     if (overlay) overlay.addEventListener('click', function () {
         document.body.classList.remove('sidebar-open');
     });
 
-    // Klik menu di HP → sidebar otomatis tertutup
     if (sidebar) sidebar.querySelectorAll('a').forEach(function (a) {
         a.addEventListener('click', function () {
             if (isMobile()) document.body.classList.remove('sidebar-open');
         });
     });
 
-    // Kalau layar dibesarkan lagi, mode mobile dimatikan
     window.addEventListener('resize', function () {
         if (!isMobile()) document.body.classList.remove('sidebar-open');
     });
@@ -365,19 +367,31 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
     </div>
 </div>
 
+{{-- ✅ SCRIPT EFEK BELAH (3 lapis pengaman) --}}
 <script>
 (function () {
-    const drawer = document.getElementById('laporanDrawer');
-    const mainArea = document.getElementById('mainArea');
+    var drawer   = document.getElementById('laporanDrawer');
+    var mainArea = document.getElementById('mainArea');
+    var btnFloat = document.querySelector('.btn-float-laporan');
     if (!drawer || !mainArea) return;
-    drawer.addEventListener('show.bs.offcanvas', () => {
-        mainArea.classList.add('drawer-open');
-        document.body.classList.add('drawer-open');
+
+    function buka()  { mainArea.classList.add('drawer-open');    document.body.classList.add('drawer-open'); }
+    function tutup() { mainArea.classList.remove('drawer-open'); document.body.classList.remove('drawer-open'); }
+
+    // 1) Event resmi Bootstrap
+    drawer.addEventListener('show.bs.offcanvas', buka);
+    drawer.addEventListener('hide.bs.offcanvas', tutup);
+    // 2) Event fallback (setelah animasi selesai)
+    drawer.addEventListener('shown.bs.offcanvas', buka);
+    drawer.addEventListener('hidden.bs.offcanvas', tutup);
+    // 3) Fallback klik tombol melayang & tombol close
+    if (btnFloat) btnFloat.addEventListener('click', function () {
+        setTimeout(function () {
+            drawer.classList.contains('show') ? buka() : tutup();
+        }, 50);
     });
-    drawer.addEventListener('hide.bs.offcanvas', () => {
-        mainArea.classList.remove('drawer-open');
-        document.body.classList.remove('drawer-open');
-    });
+    var btnClose = drawer.querySelector('[data-bs-dismiss="offcanvas"]');
+    if (btnClose) btnClose.addEventListener('click', tutup);
 })();
 </script>
 @endif

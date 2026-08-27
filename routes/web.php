@@ -12,6 +12,7 @@ use App\Http\Controllers\Manpower\LaporanHarianController;
 use App\Http\Controllers\BobotAyamController;
 use App\Http\Controllers\ArusKasController;
 
+
 // LANDING PAGE (publik)
 Route::get('/', function () {
     return view('landing');

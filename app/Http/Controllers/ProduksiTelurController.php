@@ -9,16 +9,15 @@ use Illuminate\Http\Request;
 
 class ProduksiTelurController extends Controller
 {
-    /** Laporan pivot per tanggal (sesuai spreadsheet) */
     public function index()
     {
         $kandangs = Kandang::orderBy('id')->get();
 
-        $perTanggal = ProduksiTelur::orderBy('tanggal')->orderBy('id')->get()
+        $records = ProduksiTelur::orderBy('tanggal')->orderBy('id')->get()
             ->groupBy(fn ($r) => $r->tanggal->toDateString());
 
-        $laporan = [];
-        foreach ($perTanggal as $tanggal => $items) {
+        $rows = [];
+        foreach ($records as $tanggal => $items) {
             $row = [
                 'tanggal'       => $tanggal,
                 'items'         => $items,
@@ -26,32 +25,54 @@ class ProduksiTelurController extends Controller
                 'totalPopulasi' => 0,
                 'totalProduksi' => 0,
             ];
-
             foreach ($kandangs as $kandang) {
                 $item = $items->firstWhere('kandang_id', $kandang->id);
                 $pop  = $item ? (int) $item->sisa_ayam : 0;
                 $prod = $item ? (int) $item->jumlah_produksi : 0;
-
                 $row['perKandang'][$kandang->id] = [
-                    'populasi'   => $pop,
-                    'produksi'   => $prod,
-                    'persentase' => $pop > 0 ? round($prod / $pop * 100, 2) : 0,
+                    'item'        => $item,
+                    'populasi'    => $pop,
+                    'produksi'    => $prod,
+                    'telurBagus'  => $item ? (int) $item->telur_bagus : 0,
+                    'telurReject' => $item ? (int) $item->telur_reject : 0,
+                    'persentase'  => $pop > 0 ? round($prod / $pop * 100, 2) : 0,
                 ];
-
                 $row['totalPopulasi'] += $pop;
                 $row['totalProduksi'] += $prod;
             }
-
             $row['totalPersentase'] = $row['totalPopulasi'] > 0
                 ? round($row['totalProduksi'] / $row['totalPopulasi'] * 100, 2)
                 : 0;
-
-            $laporan[] = $row;
+            $rows[] = $row;
         }
 
-        return view('produksi_telur.index', compact('kandangs', 'laporan'));
-    }
+        // Kelompokkan per bulan (bulan terbaru paling atas, tanggal terbaru paling atas)
+        $perBulan = collect($rows)
+            ->groupBy(fn ($r) => substr($r['tanggal'], 0, 7))
+            ->map(fn ($bulanRows) => [
+                'rows'  => $bulanRows->reverse()->values(),
+                'total' => $bulanRows->sum('totalProduksi'),
+            ])
+            ->sortKeysDesc();
 
+        // ===== Ringkasan atas =====
+        $totalProduksi = (int) ProduksiTelur::sum('jumlah_produksi');
+        $totalBagus    = (int) ProduksiTelur::sum('telur_bagus');
+        $totalReject   = (int) ProduksiTelur::sum('telur_reject');
+        $sumSisa       = (int) ProduksiTelur::where('sisa_ayam', '>', 0)->sum('sisa_ayam');
+        $rataHdp       = $sumSisa > 0 ? round($totalProduksi / $sumSisa * 100, 2) : 0;
+
+        $namaBulan = [
+            1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April',
+            5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus',
+            9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember',
+        ];
+
+        return view('produksi_telur.index', compact(
+            'kandangs', 'perBulan', 'namaBulan',
+            'totalProduksi', 'totalBagus', 'totalReject', 'rataHdp'
+        ));
+    }
     public function create()
     {
         return view('produksi_telur.create', [

@@ -25,32 +25,26 @@ class LaporanHarianController extends Controller
         return view('admin.laporan.index', compact('kandangs', 'laporan'));
     }
 
+    /** MANPOWER: form laporan harian */
     public function create()
     {
         $kandangs = Kandang::orderBy('id')->get();
         $populasiTerakhir = [];
-        foreach ($kandangs as $kandang) {
-            $lastLaporan = LaporanHarian::where('kandang_id', $kandang->id)
-                ->orderByDesc('tanggal')->orderByDesc('id')->first();
 
+        foreach ($kandangs as $kandang) {
+            // ✅ SELALU ambil dari data Populasi (input admin), bukan dari laporan sebelumnya
             $pop = Populasi::where('kandang_id', $kandang->id)
                 ->latest('tanggal')->first();
 
-            if ($lastLaporan) {
-                $populasiTerakhir[$kandang->id] = [
-                    'sisa'          => (int) $lastLaporan->sisa_ayam,
-                    'tanggal'       => $lastLaporan->tanggal->format('d/m/Y'),
-                    'usia_dasar'    => $pop ? (int) $pop->usia : 0,
-                    'tanggal_dasar' => $pop ? $pop->tanggal->toDateString() : null,
-                ];
-            } else {
-                $populasiTerakhir[$kandang->id] = $pop ? [
-                    'sisa'          => (int) $pop->sisa,
-                    'tanggal'       => $pop->tanggal->format('d/m/Y'),
-                    'usia_dasar'    => (int) $pop->usia,
-                    'tanggal_dasar' => $pop->tanggal->toDateString(),
-                ] : null;
-            }
+            $populasiTerakhir[$kandang->id] = $pop ? [
+                'sisa'          => (int) $pop->sisa,
+                'hidup'         => (int) $pop->hidup,
+                'mati'          => (int) $pop->mati,
+                'afkir'         => (int) $pop->afkir,
+                'tanggal'       => $pop->tanggal->format('d/m/Y'),
+                'usia_dasar'    => (int) $pop->usia,
+                'tanggal_dasar' => $pop->tanggal->toDateString(),
+            ] : null;
         }
 
         return view('manpower.create', [
@@ -60,6 +54,7 @@ class LaporanHarianController extends Controller
         ]);
     }
 
+    /** MANPOWER: simpan laporan — TIDAK mengubah data Populasi admin */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -75,7 +70,7 @@ class LaporanHarianController extends Controller
             'column_10'      => 'nullable|string|max:255',
         ]);
 
-        // cegah laporan dobel: 1 kandang 1 tanggal
+        // Cegah laporan dobel: 1 kandang 1 tanggal
         $sudahAda = LaporanHarian::where('kandang_id', $validated['kandang_id'])
             ->whereDate('tanggal', $validated['tanggal'])
             ->exists();
@@ -86,23 +81,24 @@ class LaporanHarianController extends Controller
             ]);
         }
 
-        // sudah ada riwayat → ikuti rantai; belum ada → pakai input manual
-        $baseline = LaporanHarian::baselineSebelum(
-            (int) $validated['kandang_id'],
-            $validated['tanggal']
-        );
+        // ✅ Ambil baseline SELALU dari Populasi admin (bukan dari laporan sebelumnya)
+        $pop = Populasi::where('kandang_id', $validated['kandang_id'])
+            ->latest('tanggal')->first();
 
-        $validated['user_id']   = $request->user()->id;
-        $validated['hidup']     = $baseline ?? (int) ($validated['hidup'] ?? 0);
-        $validated['sisa_ayam'] = 0; // dihitung otomatis
+        $validated['user_id'] = $request->user()->id;
 
-        $laporan = LaporanHarian::create($validated);
+        // Populasi awal = sisa dari data admin, atau input manual jika belum ada
+        $validated['hidup'] = $pop
+            ? (int) $pop->sisa
+            : (int) ($validated['hidup'] ?? 0);
 
-        LaporanHarian::hitungUlangRantai(
-            $laporan->kandang_id,
-            $laporan->tanggal->toDateString()
-        );
+        // Sisa ayam = hidup - mati (afkir tidak mengurangi, sesuai aturan sebelumnya)
+        $validated['sisa_ayam'] = max(0, $validated['hidup'] - (int) $validated['mati']);
 
+        // ✅ Simpan ke laporan_harian SAJA — TIDAK mengubah tabel populasi admin
+        LaporanHarian::create($validated);
+
+        // ✅ TIDAK memanggil hitungUlangRantai — data manpower independen dari admin
         return redirect()->route('manpower.laporan.create')
             ->with('success', 'Laporan harian berhasil disimpan.');
     }
