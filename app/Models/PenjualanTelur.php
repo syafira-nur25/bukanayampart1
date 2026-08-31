@@ -31,4 +31,9 @@ class PenjualanTelur extends Model
             'produksi_id'
         );
     }
+
+        public function gudang(): BelongsTo
+    {
+        return $this->belongsTo(GudangTelur::class, 'gudang_id');
+    }
 }

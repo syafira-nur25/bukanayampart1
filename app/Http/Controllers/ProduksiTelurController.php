@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Kandang;
 use App\Models\Populasi;
 use App\Models\ProduksiTelur;
+use App\Models\GudangTelur;
 use Illuminate\Http\Request;
 
 class ProduksiTelurController extends Controller
@@ -46,7 +47,6 @@ class ProduksiTelurController extends Controller
             $rows[] = $row;
         }
 
-        // Kelompokkan per bulan (bulan terbaru paling atas, tanggal terbaru paling atas)
         $perBulan = collect($rows)
             ->groupBy(fn ($r) => substr($r['tanggal'], 0, 7))
             ->map(fn ($bulanRows) => [
@@ -55,7 +55,6 @@ class ProduksiTelurController extends Controller
             ])
             ->sortKeysDesc();
 
-        // ===== Ringkasan atas =====
         $totalProduksi = (int) ProduksiTelur::sum('jumlah_produksi');
         $totalBagus    = (int) ProduksiTelur::sum('telur_bagus');
         $totalReject   = (int) ProduksiTelur::sum('telur_reject');
@@ -73,12 +72,14 @@ class ProduksiTelurController extends Controller
             'totalProduksi', 'totalBagus', 'totalReject', 'rataHdp'
         ));
     }
+
     public function create()
     {
         return view('produksi_telur.create', [
             'kandangs'     => Kandang::orderBy('id')->get(),
             'populisis'    => Populasi::with('kandang')->latest('tanggal')->get(),
             'sisaPopulasi' => Populasi::pluck('sisa', 'id'),
+            'gudangs'      => GudangTelur::orderBy('id')->get(), // ✅ TAMBAHAN
         ]);
     }
 
@@ -88,6 +89,7 @@ class ProduksiTelurController extends Controller
             'tanggal'         => 'required|date',
             'kandang_id'      => 'required|exists:kandang,id',
             'populasi_id'     => 'required|exists:populasi,id',
+            'gudang_id'       => 'nullable|exists:gudang_telur,id', // ✅ TAMBAHAN
             'jumlah_produksi' => 'required|integer|min:0',
             'telur_bagus'     => 'required|integer|min:0',
             'telur_reject'    => 'required|integer|min:0',
@@ -95,7 +97,6 @@ class ProduksiTelurController extends Controller
             'afkir'           => 'required|integer|min:0',
         ]);
 
-        // SISA & PERSENTASE otomatis dari populasi yang dipilih
         $populasi = Populasi::findOrFail($validated['populasi_id']);
 
         $validated['sisa_ayam']  = (int) $populasi->sisa;
@@ -111,7 +112,7 @@ class ProduksiTelurController extends Controller
 
     public function show(ProduksiTelur $produksiTelur)
     {
-        $produksiTelur->load(['kandang', 'populasi', 'penjualanTelur']);
+        $produksiTelur->load(['kandang', 'populasi', 'penjualanTelur', 'gudang']);
 
         return view('produksi_telur.show', compact('produksiTelur'));
     }
@@ -123,6 +124,7 @@ class ProduksiTelurController extends Controller
             'kandangs'      => Kandang::orderBy('id')->get(),
             'populisis'     => Populasi::with('kandang')->latest('tanggal')->get(),
             'sisaPopulasi'  => Populasi::pluck('sisa', 'id'),
+            'gudangs'       => GudangTelur::orderBy('id')->get(), // ✅ TAMBAHAN
         ]);
     }
 
@@ -132,6 +134,7 @@ class ProduksiTelurController extends Controller
             'tanggal'         => 'required|date',
             'kandang_id'      => 'required|exists:kandang,id',
             'populasi_id'     => 'required|exists:populasi,id',
+            'gudang_id'       => 'nullable|exists:gudang_telur,id', // ✅ TAMBAHAN
             'jumlah_produksi' => 'required|integer|min:0',
             'telur_bagus'     => 'required|integer|min:0',
             'telur_reject'    => 'required|integer|min:0',

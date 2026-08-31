@@ -51,4 +51,35 @@ class ProduksiTelur extends Model
             'produksi_id'
         );
     }
+
+        public function gudang(): BelongsTo
+    {
+        return $this->belongsTo(GudangTelur::class, 'gudang_id');
+    }
+
+    /**
+ * Hitung stok telur global (telur bagus yang belum terjual)
+ * Stok = Total telur bagus diproduksi - Total telur terjual
+ */
+public static function stokTelur(): int
+{
+    $totalProduksi = (int) self::sum('telur_bagus');
+    $totalTerjual = (int) PenjualanTelur::sum('jumlah');
+
+    return max(0, $totalProduksi - $totalTerjual);
+}
+
+    /**
+     * Hitung stok telur per kandang
+     */
+    public static function stokTelurPerKandang(int $kandangId): int
+    {
+        $totalProduksi = (int) self::where('kandang_id', $kandangId)->sum('telur_bagus');
+
+        $totalTerjual = (int) PenjualanTelur::whereHas('produksiTelur', function($q) use ($kandangId) {
+            $q->where('kandang_id', $kandangId);
+        })->sum('jumlah');
+
+        return max(0, $totalProduksi - $totalTerjual);
+    }
 }

@@ -38,6 +38,21 @@
                     </select>
                 </div>
 
+                {{-- ===== ✅ TAMBAHAN: DROPDOWN GUDANG ===== --}}
+                <div class="col-md-6 mb-3">
+                    <label>Ambil Dari Gudang</label>
+                    <select name="gudang_id" class="form-select">
+                        <option value="">-- Pilih Gudang (opsional) --</option>
+                        @foreach ($gudangs as $g)
+                            <option value="{{ $g->id }}"
+                                @selected(old('gudang_id', $penjualanTelur->gudang_id) == $g->id)>
+                                {{ $g->nama }} (stok {{ number_format($g->stokButir()) }} butir)
+                            </option>
+                        @endforeach
+                    </select>
+                    <div class="form-text">Penjualan mengurangi stok gudang ini. 1 ikat = {{ \App\Models\GudangTelur::BUTIR_PER_IKAT }} butir.</div>
+                </div>
+
                 <div class="col-md-4 mb-3">
                     <label>Jumlah (ikat)</label>
                     <input type="number" name="jumlah" id="jumlah" class="form-control"

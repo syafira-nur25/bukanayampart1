@@ -4,13 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\PenjualanTelur;
 use App\Models\ProduksiTelur;
+use App\Models\GudangTelur;
 use Illuminate\Http\Request;
 
 class PenjualanTelurController extends Controller
 {
     public function index()
     {
-        $penjualans = PenjualanTelur::with('produksiTelur')
+        $penjualans = PenjualanTelur::with(['produksiTelur', 'gudang'])
             ->latest('tanggal')
             ->get();
 
@@ -23,18 +24,21 @@ class PenjualanTelurController extends Controller
             ->latest('tanggal')
             ->get();
 
-        return view('penjualan_telur.create', compact('produksis'));
+        $gudangs = GudangTelur::orderBy('id')->get(); // ✅ TAMBAHAN
+
+        return view('penjualan_telur.create', compact('produksis', 'gudangs'));
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'tanggal' => 'required|date',
-            'jumlah' => 'required|integer|min:1',
-            'customer' => 'required|string|max:100',
-            'total' => 'required|integer|min:0',
+            'tanggal'     => 'required|date',
+            'jumlah'      => 'required|integer|min:1',
+            'customer'    => 'required|string|max:100',
+            'total'       => 'required|integer|min:0',
             'produksi_id' => 'required|exists:produksi_telur,id',
-            'harga' => 'required|numeric|min:0',
+            'gudang_id'   => 'nullable|exists:gudang_telur,id', // ✅ TAMBAHAN
+            'harga'       => 'required|numeric|min:0',
         ]);
 
         PenjualanTelur::create($validated);
@@ -46,12 +50,9 @@ class PenjualanTelurController extends Controller
 
     public function show(PenjualanTelur $penjualanTelur)
     {
-        $penjualanTelur->load('produksiTelur');
+        $penjualanTelur->load(['produksiTelur', 'gudang']);
 
-        return view(
-            'penjualan_telur.show',
-            compact('penjualanTelur')
-        );
+        return view('penjualan_telur.show', compact('penjualanTelur'));
     }
 
     public function edit(PenjualanTelur $penjualanTelur)
@@ -60,23 +61,25 @@ class PenjualanTelurController extends Controller
             ->latest('tanggal')
             ->get();
 
+        $gudangs = GudangTelur::orderBy('id')->get(); // ✅ TAMBAHAN
+
         return view('penjualan_telur.edit', compact(
             'penjualanTelur',
-            'produksis'
+            'produksis',
+            'gudangs'
         ));
     }
 
-    public function update(
-        Request $request,
-        PenjualanTelur $penjualanTelur
-    ) {
+    public function update(Request $request, PenjualanTelur $penjualanTelur)
+    {
         $validated = $request->validate([
-            'tanggal' => 'required|date',
-            'jumlah' => 'required|integer|min:1',
-            'customer' => 'required|string|max:100',
-            'total' => 'required|integer|min:0',
+            'tanggal'     => 'required|date',
+            'jumlah'      => 'required|integer|min:1',
+            'customer'    => 'required|string|max:100',
+            'total'       => 'required|integer|min:0',
             'produksi_id' => 'required|exists:produksi_telur,id',
-            'harga' => 'required|numeric|min:0',
+            'gudang_id'   => 'nullable|exists:gudang_telur,id', // ✅ TAMBAHAN
+            'harga'       => 'required|numeric|min:0',
         ]);
 
         $penjualanTelur->update($validated);

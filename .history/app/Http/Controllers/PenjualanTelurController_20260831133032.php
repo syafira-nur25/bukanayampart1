@@ -1,0 +1,107 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\PenjualanTelur;
+use App\Models\ProduksiTelur;
+use App\Models\GudangTelur;
+use Illuminate\Http\Request;
+
+class PenjualanTelurController extends Controller
+{
+    public function index()
+    {
+        $penjualans = PenjualanTelur::with(['produksiTelur', 'gudang'])
+            ->latest('tanggal')
+            ->get();
+
+        return view('penjualan_telur.index', compact('penjualans'));
+    }
+
+    public function create()
+    {
+        $produksis = ProduksiTelur::with('kandang')
+            ->latest('tanggal')
+            ->get();
+
+        $gudangs = GudangTelur::orderBy('id')->get();
+
+        return view('penjualan_telur.create', compact('produksis', 'gudangs'));
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'tanggal'     => 'required|date',
+            'jumlah'      => 'required|integer|min:1',
+            'customer'    => 'required|string|max:100',
+            'total'       => 'required|integer|min:0',
+            'produksi_id' => 'required|exists:produksi_telur,id',
+            'gudang_id'   => 'nullable|exists:gudang_telur,id',
+            'harga'       => 'required|numeric|min:0',
+        ]);
+
+        $stokTersedia = ProduksiTelur::stokTelur();
+    if ($validated['jumlah'] > $stokTersedia) {
+        return back()->withInput()->withErrors([
+            'jumlah' => 'Stok telur tidak cukup! Stok tersedia: ' . number_format($stokTersedia) . ' butir.'
+        ]);
+    }
+    
+        PenjualanTelur::create($validated);
+
+        return redirect()
+            ->route('penjualan-telur.index')
+            ->with('success', 'Penjualan telur berhasil ditambahkan.');
+    }
+
+    public function show(PenjualanTelur $penjualanTelur)
+    {
+        $penjualanTelur->load(['produksiTelur', 'gudang']);
+
+        return view('penjualan_telur.show', compact('penjualanTelur'));
+    }
+
+    public function edit(PenjualanTelur $penjualanTelur)
+    {
+        $produksis = ProduksiTelur::with('kandang')
+            ->latest('tanggal')
+            ->get();
+
+        $gudangs = GudangTelur::orderBy('id')->get();
+
+        return view('penjualan_telur.edit', compact(
+            'penjualanTelur',
+            'produksis',
+            'gudangs'
+        ));
+    }
+
+    public function update(Request $request, PenjualanTelur $penjualanTelur)
+    {
+        $validated = $request->validate([
+            'tanggal'     => 'required|date',
+            'jumlah'      => 'required|integer|min:1',
+            'customer'    => 'required|string|max:100',
+            'total'       => 'required|integer|min:0',
+            'produksi_id' => 'required|exists:produksi_telur,id',
+            'gudang_id'   => 'nullable|exists:gudang_telur,id',
+            'harga'       => 'required|numeric|min:0',
+        ]);
+
+        $penjualanTelur->update($validated);
+
+        return redirect()
+            ->route('penjualan-telur.index')
+            ->with('success', 'Penjualan telur berhasil diperbarui.');
+    }
+
+    public function destroy(PenjualanTelur $penjualanTelur)
+    {
+        $penjualanTelur->delete();
+
+        return redirect()
+            ->route('penjualan-telur.index')
+            ->with('success', 'Penjualan telur berhasil dihapus.');
+    }
+}

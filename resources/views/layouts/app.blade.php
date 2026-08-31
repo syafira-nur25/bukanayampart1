@@ -194,6 +194,12 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
             <a href="{{ route('penjualan-telur.index') }}" class="{{ request()->is('penjualan-telur*') ? 'active' : '' }}">
                 <i class="bi bi-cash-stack"></i> Penjualan Telur
             </a>
+            <a href="{{ route('stok-telur.index') }}" class="{{ request()->is('stok-telur*') ? 'active' : '' }}">
+                <i class="bi bi-boxes"></i> Stok Telur
+            </a>
+            <a href="{{ route('gudang-telur.index') }}" class="{{ request()->is('gudang-telur*') ? 'active' : '' }}">
+                <i class="bi bi-building"></i> Gudang Telur
+            </a>
             <div class="menu-title">Keuangan</div>
             <a href="{{ route('arus-kas.index') }}" class="{{ request()->is('arus-kas*') ? 'active' : '' }}">
                 <i class="bi bi-cash-coin"></i> Arus Kas

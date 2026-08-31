@@ -12,6 +12,7 @@ $kelasPersen = function ($p) {
     return 'text-bg-danger';
 };
 @endphp
+
 <style>
 .month-icon { width: 38px; height: 38px; border-radius: 10px; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
 .prod-num { font-size: 14px; }

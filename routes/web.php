@@ -11,7 +11,8 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Manpower\LaporanHarianController;
 use App\Http\Controllers\BobotAyamController;
 use App\Http\Controllers\ArusKasController;
-
+use App\Http\Controllers\GudangTelurController;
+use App\Http\Controllers\StokTelurController;
 
 // LANDING PAGE (publik)
 Route::get('/', function () {
@@ -30,6 +31,21 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::resource('pemberian-pakan', PemberianPakanController::class);
     Route::resource('pakan-kandang', PakanKandangController::class);
 
+    // Gudang Telur
+    Route::resource('gudang-telur', GudangTelurController::class)
+        ->parameters(['gudang-telur' => 'gudangTelur']);
+
+    // Stok Telur (Index, Return, dan Stok Masuk Manual)
+    Route::get('/stok-telur', [StokTelurController::class, 'index'])->name('stok-telur.index');
+
+    // Return Telur
+    Route::post('/stok-telur/return', [StokTelurController::class, 'storeReturn'])->name('stok-telur.return.store');
+    Route::delete('/stok-telur/return/{returnTelur}', [StokTelurController::class, 'destroyReturn'])->name('stok-telur.return.destroy');
+
+    // Stok Masuk Manual
+    Route::post('/stok-telur/stok', [StokTelurController::class, 'storeStok'])->name('stok-telur.stok.store');
+    Route::delete('/stok-telur/stok/{stokMasukTelur}', [StokTelurController::class, 'destroyStok'])->name('stok-telur.stok.destroy');
+
     // Laporan Pakan
     Route::get('/laporan-pakan', [PakanKandangController::class, 'laporan'])->name('pakan.laporan');
     Route::get('/laporan-pakan/export', [PakanKandangController::class, 'exportExcel'])->name('pakan.laporan.export');
@@ -39,13 +55,10 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     // agar tidak ditangkap sebagai parameter {arusKas}
     Route::get('/arus-kas/export', [ArusKasController::class, 'exportExcel'])->name('arus-kas.export');
     Route::resource('arus-kas', ArusKasController::class)
-        ->parameters(['arus-kas' => 'arusKas']); // <-- biar parameternya {arusKas}, bukan {arus_ka}
+        ->parameters(['arus-kas' => 'arusKas']);
 
     // Laporan harian (rekap kiriman man power)
     Route::get('/admin/laporan', [LaporanHarianController::class, 'index'])->name('admin.laporan.index');
-
-    // Export Excel (aktifkan kalau method exportExcel sudah ada di controller)
-    // Route::get('/admin/laporan/export', [LaporanHarianController::class, 'exportExcel'])->name('admin.laporan.export');
 });
 
 /* ========== KHUSUS MAN POWER ========== */
