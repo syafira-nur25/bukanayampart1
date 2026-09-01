@@ -89,7 +89,6 @@ use App\Http\Controllers\ArusKasController;
 use App\Http\Controllers\GudangTelurController;
 use App\Http\Controllers\StokTelurController;
 
-
 // LANDING PAGE (publik)
 Route::get('/', function () {
     return view('landing');
@@ -107,6 +106,21 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::resource('pemberian-pakan', PemberianPakanController::class);
     Route::resource('pakan-kandang', PakanKandangController::class);
 
+    // Gudang Telur
+    Route::resource('gudang-telur', GudangTelurController::class)
+        ->parameters(['gudang-telur' => 'gudangTelur']);
+
+    // Stok Telur (Index, Return, dan Stok Masuk Manual)
+    Route::get('/stok-telur', [StokTelurController::class, 'index'])->name('stok-telur.index');
+
+    // Return Telur
+    Route::post('/stok-telur/return', [StokTelurController::class, 'storeReturn'])->name('stok-telur.return.store');
+    Route::delete('/stok-telur/return/{returnTelur}', [StokTelurController::class, 'destroyReturn'])->name('stok-telur.return.destroy');
+
+    // Stok Masuk Manual
+    Route::post('/stok-telur/stok', [StokTelurController::class, 'storeStok'])->name('stok-telur.stok.store');
+    Route::delete('/stok-telur/stok/{stokMasukTelur}', [StokTelurController::class, 'destroyStok'])->name('stok-telur.stok.destroy');
+
     // Laporan Pakan
     Route::get('/laporan-pakan', [PakanKandangController::class, 'laporan'])->name('pakan.laporan');
     Route::get('/laporan-pakan/export', [PakanKandangController::class, 'exportExcel'])->name('pakan.laporan.export');
@@ -116,20 +130,10 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     // agar tidak ditangkap sebagai parameter {arusKas}
     Route::get('/arus-kas/export', [ArusKasController::class, 'exportExcel'])->name('arus-kas.export');
     Route::resource('arus-kas', ArusKasController::class)
-        ->parameters(['arus-kas' => 'arusKas']); // <-- biar parameternya {arusKas}, bukan {arus_ka}
+        ->parameters(['arus-kas' => 'arusKas']);
 
     // Laporan harian (rekap kiriman man power)
     Route::get('/admin/laporan', [LaporanHarianController::class, 'index'])->name('admin.laporan.index');
-    Route::resource('gudang-telur', GudangTelurController::class)
-    ->parameters(['gudang-telur' => 'gudangTelur']);
-
-// Stok Telur
-Route::get('/stok-telur', [StokTelurController::class, 'index'])->name('stok-telur.index');
-Route::post('/stok-telur/return', [StokTelurController::class, 'storeReturn'])->name('stok-telur.return.store');
-Route::delete('/stok-telur/return/{returnTelur}', [StokTelurController::class, 'destroyReturn'])->name('stok-telur.return.destroy');
-
-    // Export Excel (aktifkan kalau method exportExcel sudah ada di controller)
-    // Route::get('/admin/laporan/export', [LaporanHarianController::class, 'exportExcel'])->name('admin.laporan.export');
 });
 
 /* ========== KHUSUS MAN POWER ========== */
@@ -1009,7 +1013,7 @@ class PenjualanTelurController extends Controller
             ->latest('tanggal')
             ->get();
 
-        $gudangs = GudangTelur::orderBy('id')->get();
+        $gudangs = GudangTelur::orderBy('id')->get(); // ✅ TAMBAHAN
 
         return view('penjualan_telur.create', compact('produksis', 'gudangs'));
     }
@@ -1022,16 +1026,9 @@ class PenjualanTelurController extends Controller
             'customer'    => 'required|string|max:100',
             'total'       => 'required|integer|min:0',
             'produksi_id' => 'required|exists:produksi_telur,id',
-            'gudang_id'   => 'nullable|exists:gudang_telur,id',
+            'gudang_id'   => 'nullable|exists:gudang_telur,id', // ✅ TAMBAHAN
             'harga'       => 'required|numeric|min:0',
         ]);
-
-        $stokTersedia = ProduksiTelur::stokTelur();
-    if ($validated['jumlah'] > $stokTersedia) {
-        return back()->withInput()->withErrors([
-            'jumlah' => 'Stok telur tidak cukup! Stok tersedia: ' . number_format($stokTersedia) . ' butir.'
-        ]);
-    }
 
         PenjualanTelur::create($validated);
 
@@ -1053,7 +1050,7 @@ class PenjualanTelurController extends Controller
             ->latest('tanggal')
             ->get();
 
-        $gudangs = GudangTelur::orderBy('id')->get();
+        $gudangs = GudangTelur::orderBy('id')->get(); // ✅ TAMBAHAN
 
         return view('penjualan_telur.edit', compact(
             'penjualanTelur',
@@ -1070,17 +1067,10 @@ class PenjualanTelurController extends Controller
             'customer'    => 'required|string|max:100',
             'total'       => 'required|integer|min:0',
             'produksi_id' => 'required|exists:produksi_telur,id',
-            'gudang_id'   => 'nullable|exists:gudang_telur,id',
+            'gudang_id'   => 'nullable|exists:gudang_telur,id', // ✅ TAMBAHAN
             'harga'       => 'required|numeric|min:0',
         ]);
 
-         $stokTersedia = ProduksiTelur::stokTelur() + $penjualanTelur->jumlah;
-    if ($validated['jumlah'] > $stokTersedia) {
-        return back()->withInput()->withErrors([
-            'jumlah' => 'Stok telur tidak cukup! Stok tersedia: ' . number_format($stokTersedia) . ' butir.'
-        ]);
-    }
-    
         $penjualanTelur->update($validated);
 
         return redirect()
@@ -1252,7 +1242,6 @@ class ProduksiTelurController extends Controller
             $rows[] = $row;
         }
 
-        // Kelompokkan per bulan (bulan terbaru paling atas, tanggal terbaru paling atas)
         $perBulan = collect($rows)
             ->groupBy(fn ($r) => substr($r['tanggal'], 0, 7))
             ->map(fn ($bulanRows) => [
@@ -1261,7 +1250,6 @@ class ProduksiTelurController extends Controller
             ])
             ->sortKeysDesc();
 
-        // ===== Ringkasan atas =====
         $totalProduksi = (int) ProduksiTelur::sum('jumlah_produksi');
         $totalBagus    = (int) ProduksiTelur::sum('telur_bagus');
         $totalReject   = (int) ProduksiTelur::sum('telur_reject');
@@ -1286,7 +1274,7 @@ class ProduksiTelurController extends Controller
             'kandangs'     => Kandang::orderBy('id')->get(),
             'populisis'    => Populasi::with('kandang')->latest('tanggal')->get(),
             'sisaPopulasi' => Populasi::pluck('sisa', 'id'),
-            'gudangs'      => GudangTelur::orderBy('id')->get(),
+            'gudangs'      => GudangTelur::orderBy('id')->get(), // ✅ TAMBAHAN
         ]);
     }
 
@@ -1296,7 +1284,7 @@ class ProduksiTelurController extends Controller
             'tanggal'         => 'required|date',
             'kandang_id'      => 'required|exists:kandang,id',
             'populasi_id'     => 'required|exists:populasi,id',
-            'gudang_id'       => 'nullable|exists:gudang_telur,id',
+            'gudang_id'       => 'nullable|exists:gudang_telur,id', // ✅ TAMBAHAN
             'jumlah_produksi' => 'required|integer|min:0',
             'telur_bagus'     => 'required|integer|min:0',
             'telur_reject'    => 'required|integer|min:0',
@@ -1304,7 +1292,6 @@ class ProduksiTelurController extends Controller
             'afkir'           => 'required|integer|min:0',
         ]);
 
-        // SISA & PERSENTASE otomatis dari populasi yang dipilih
         $populasi = Populasi::findOrFail($validated['populasi_id']);
 
         $validated['sisa_ayam']  = (int) $populasi->sisa;
@@ -1332,7 +1319,7 @@ class ProduksiTelurController extends Controller
             'kandangs'      => Kandang::orderBy('id')->get(),
             'populisis'     => Populasi::with('kandang')->latest('tanggal')->get(),
             'sisaPopulasi'  => Populasi::pluck('sisa', 'id'),
-            'gudangs'       => GudangTelur::orderBy('id')->get(),
+            'gudangs'       => GudangTelur::orderBy('id')->get(), // ✅ TAMBAHAN
         ]);
     }
 
@@ -1342,7 +1329,7 @@ class ProduksiTelurController extends Controller
             'tanggal'         => 'required|date',
             'kandang_id'      => 'required|exists:kandang,id',
             'populasi_id'     => 'required|exists:populasi,id',
-            'gudang_id'       => 'nullable|exists:gudang_telur,id',
+            'gudang_id'       => 'nullable|exists:gudang_telur,id', // ✅ TAMBAHAN
             'jumlah_produksi' => 'required|integer|min:0',
             'telur_bagus'     => 'required|integer|min:0',
             'telur_reject'    => 'required|integer|min:0',
@@ -1443,6 +1430,7 @@ namespace App\Http\Controllers;
 
 use App\Models\GudangTelur;
 use App\Models\ReturnTelur;
+use App\Models\StokMasukTelur;
 use App\Models\ProduksiTelur;
 use App\Models\PenjualanTelur;
 use Illuminate\Http\Request;
@@ -1455,13 +1443,67 @@ class StokTelurController extends Controller
 
         $returns = ReturnTelur::with('gudang')->latest('tanggal')->latest('id')->get();
 
-        $masukTerbaru = ProduksiTelur::with('gudang')
-            ->whereNotNull('gudang_id')->latest('tanggal')->latest('id')->limit(10)->get();
+        // Masuk dari PRODUKSI (yang dipilih gudangnya) → jadikan array biasa
+        $masukProduksi = ProduksiTelur::with('gudang')
+            ->whereNotNull('gudang_id')
+            ->get()
+            ->map(fn ($p) => [
+                'tanggal' => $p->tanggal,
+                'gudang'  => $p->gudang->nama ?? '-',
+                'jumlah'  => (int) $p->jumlah_produksi,
+                'sumber'  => 'Produksi',
+                'id'      => null,
+            ]);
+
+        // Masuk MANUAL (tambah stok langsung di halaman stok)
+        $masukManual = StokMasukTelur::with('gudang')
+            ->get()
+            ->map(fn ($m) => [
+                'tanggal' => $m->tanggal,
+                'gudang'  => $m->gudang->nama ?? '-',
+                'jumlah'  => (int) $m->jumlah,
+                'sumber'  => $m->keterangan ? 'Manual · ' . $m->keterangan : 'Manual',
+                'id'      => $m->id,
+            ]);
+
+        // ✅ FIX: collect() + concat() supaya TIDAK memanggil getKey() pada array
+        $masukGabungan = collect($masukProduksi)
+            ->concat($masukManual)
+            ->sortByDesc('tanggal')
+            ->values()
+            ->take(20);
 
         $keluarTerbaru = PenjualanTelur::with('gudang')
-            ->whereNotNull('gudang_id')->latest('tanggal')->latest('id')->limit(10)->get();
+            ->whereNotNull('gudang_id')
+            ->latest('tanggal')->latest('id')->limit(20)->get();
 
-        return view('stok_telur.index', compact('gudangs', 'returns', 'masukTerbaru', 'keluarTerbaru'));
+        return view('stok_telur.index', compact(
+            'gudangs', 'returns', 'masukGabungan', 'keluarTerbaru'
+        ));
+    }
+
+    /** ✅ Tambah stok manual ke gudang */
+    public function storeStok(Request $request)
+    {
+        $validated = $request->validate([
+            'tanggal'    => 'required|date',
+            'gudang_id'  => 'required|exists:gudang_telur,id',
+            'jumlah'     => 'required|integer|min:1',
+            'keterangan' => 'nullable|string|max:255',
+        ]);
+
+        StokMasukTelur::create($validated);
+
+        return redirect()->route('stok-telur.index')
+            ->with('success', 'Stok gudang berhasil ditambahkan.');
+    }
+
+    public function destroyStok(StokMasukTelur $stokMasukTelur)
+    {
+        $stokMasukTelur->delete();
+
+        return redirect()->route('stok-telur.index')
+            ->with('success', 'Catatan stok manual berhasil dihapus.');
     }
 
     public function storeReturn(Request $request)
@@ -1475,6 +1517,7 @@ class StokTelurController extends Controller
         ]);
 
         $gudang = GudangTelur::find($validated['gudang_id']);
+
         if ($validated['jumlah'] > $gudang->stokButir()) {
             return back()->withInput()->withErrors([
                 'jumlah' => 'Return melebihi stok ' . $gudang->nama
@@ -1483,13 +1526,17 @@ class StokTelurController extends Controller
         }
 
         ReturnTelur::create($validated);
-        return redirect()->route('stok-telur.index')->with('success', 'Return telur berhasil dicatat.');
+
+        return redirect()->route('stok-telur.index')
+            ->with('success', 'Return telur berhasil dicatat.');
     }
 
     public function destroyReturn(ReturnTelur $returnTelur)
     {
         $returnTelur->delete();
-        return redirect()->route('stok-telur.index')->with('success', 'Data return berhasil dihapus.');
+
+        return redirect()->route('stok-telur.index')
+            ->with('success', 'Data return berhasil dihapus.');
     }
 }
 
@@ -2187,19 +2234,54 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class GudangTelur extends Model
 {
-    const BUTIR_PER_IKAT = 30; // 1 ikat = 30 butir (ubah di sini jika beda)
+    const BUTIR_PER_PIRING = 30;
+    const PIRING_PER_IKAT  = 5;
+    const BUTIR_PER_IKAT   = self::BUTIR_PER_PIRING * self::PIRING_PER_IKAT; // 150 butir
 
     protected $table = 'gudang_telur';
     protected $fillable = ['nama', 'lokasi'];
 
-    public function produksiTelur(): HasMany  { return $this->hasMany(ProduksiTelur::class, 'gudang_id'); }
-    public function penjualanTelur(): HasMany { return $this->hasMany(PenjualanTelur::class, 'gudang_id'); }
-    public function returnTelur(): HasMany    { return $this->hasMany(ReturnTelur::class, 'gudang_id'); }
+    public function produksiTelur(): HasMany
+    {
+        return $this->hasMany(ProduksiTelur::class, 'gudang_id');
+    }
 
-    public function totalMasuk(): int     { return (int) $this->produksiTelur()->sum('jumlah_produksi'); }
-    public function totalKeluarButir(): int { return (int) $this->penjualanTelur()->sum('jumlah') * self::BUTIR_PER_IKAT; }
-    public function totalReturn(): int    { return (int) $this->returnTelur()->sum('jumlah'); }
-    public function stokButir(): int      { return $this->totalMasuk() - $this->totalKeluarButir() - $this->totalReturn(); }
+    public function penjualanTelur(): HasMany
+    {
+        return $this->hasMany(PenjualanTelur::class, 'gudang_id');
+    }
+
+    public function returnTelur(): HasMany
+    {
+        return $this->hasMany(ReturnTelur::class, 'gudang_id');
+    }
+
+    public function stokMasukManual(): HasMany
+    {
+        return $this->hasMany(StokMasukTelur::class, 'gudang_id');
+    }
+
+    /** Masuk = dari PRODUKSI + dari STOK MANUAL */
+    public function totalMasuk(): int
+    {
+        return (int) $this->produksiTelur()->sum('jumlah_produksi')
+             + (int) $this->stokMasukManual()->sum('jumlah');
+    }
+
+    public function totalKeluarButir(): int
+    {
+        return (int) $this->penjualanTelur()->sum('jumlah') * self::BUTIR_PER_IKAT;
+    }
+
+    public function totalReturn(): int
+    {
+        return (int) $this->returnTelur()->sum('jumlah');
+    }
+
+    public function stokButir(): int
+    {
+        return $this->totalMasuk() - $this->totalKeluarButir() - $this->totalReturn();
+    }
 }
 
 
@@ -2631,6 +2713,27 @@ class ReturnTelur extends Model
     protected $casts = ['tanggal' => 'date', 'jumlah' => 'integer'];
 
     public function gudang(): BelongsTo { return $this->belongsTo(GudangTelur::class, 'gudang_id'); }
+}
+
+
+===== C:\xampp\htdocs\peternakan_ayam\app\Models\StokMasukTelur.php =====
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class StokMasukTelur extends Model
+{
+    protected $table = 'stok_masuk_telur';
+    protected $fillable = ['tanggal', 'gudang_id', 'jumlah', 'keterangan'];
+    protected $casts = ['tanggal' => 'date', 'jumlah' => 'integer'];
+
+    public function gudang(): BelongsTo
+    {
+        return $this->belongsTo(GudangTelur::class, 'gudang_id');
+    }
 }
 
 
@@ -3416,6 +3519,103 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('arus_kas');
+    }
+};
+
+
+===== C:\xampp\htdocs\peternakan_ayam\database\migrations\2026_08_31_000001_add_gudang_id_to_telur_tables.php =====
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        // 1. Tabel produksi_telur
+        if (!Schema::hasColumn('produksi_telur', 'gudang_id')) {
+            Schema::table('produksi_telur', function (Blueprint $table) {
+                $table->unsignedBigInteger('gudang_id')->nullable()->after('kandang_id');
+                $table->foreign('gudang_id')->references('id')->on('gudang_telur')->nullOnDelete();
+            });
+        }
+
+        // 2. Tabel penjualan_telur
+        if (!Schema::hasColumn('penjualan_telur', 'gudang_id')) {
+            Schema::table('penjualan_telur', function (Blueprint $table) {
+                $table->unsignedBigInteger('gudang_id')->nullable()->after('produksi_id');
+                $table->foreign('gudang_id')->references('id')->on('gudang_telur')->nullOnDelete();
+            });
+        }
+
+        // 3. Tabel return_telur (jika tabelnya ada)
+        if (Schema::hasTable('return_telur') && !Schema::hasColumn('return_telur', 'gudang_id')) {
+            Schema::table('return_telur', function (Blueprint $table) {
+                $table->unsignedBigInteger('gudang_id')->nullable();
+                $table->foreign('gudang_id')->references('id')->on('gudang_telur')->nullOnDelete();
+            });
+        }
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        if (Schema::hasColumn('produksi_telur', 'gudang_id')) {
+            Schema::table('produksi_telur', function (Blueprint $table) {
+                $table->dropForeign(['gudang_id']);
+                $table->dropColumn('gudang_id');
+            });
+        }
+
+        if (Schema::hasColumn('penjualan_telur', 'gudang_id')) {
+            Schema::table('penjualan_telur', function (Blueprint $table) {
+                $table->dropForeign(['gudang_id']);
+                $table->dropColumn('gudang_id');
+            });
+        }
+
+        if (Schema::hasTable('return_telur') && Schema::hasColumn('return_telur', 'gudang_id')) {
+            Schema::table('return_telur', function (Blueprint $table) {
+                $table->dropForeign(['gudang_id']);
+                $table->dropColumn('gudang_id');
+            });
+        }
+    }
+};
+
+
+===== C:\xampp\htdocs\peternakan_ayam\database\migrations\2026_08_31_000002_create_return_telur_table.php =====
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('return_telur', function (Blueprint $table) {
+            $table->id();
+            $table->date('tanggal');
+            $table->foreignId('gudang_id')->constrained('gudang_telur')->cascadeOnDelete();
+            $table->integer('jumlah');
+            $table->string('alasan', 50);
+            $table->string('keterangan', 255)->nullable();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('return_telur');
     }
 };
 
@@ -5562,6 +5762,7 @@ $classes = ($active ?? false)
 
 @section('content')
 <h2 class="mb-3">Tambah Gudang Telur</h2>
+
 <div class="card">
     <div class="card-body">
         <form action="{{ route('gudang-telur.store') }}" method="POST">
@@ -5573,7 +5774,8 @@ $classes = ($active ?? false)
             </div>
             <div class="mb-3">
                 <label class="form-label">Lokasi (opsional)</label>
-                <input type="text" name="lokasi" class="form-control" value="{{ old('lokasi') }}">
+                <input type="text" name="lokasi" class="form-control"
+                       value="{{ old('lokasi') }}" placeholder="Contoh: Gudang utama">
             </div>
             <button class="btn btn-primary">Simpan</button>
             <a href="{{ route('gudang-telur.index') }}" class="btn btn-secondary">Kembali</a>
@@ -5590,6 +5792,7 @@ $classes = ($active ?? false)
 
 @section('content')
 <h2 class="mb-3">Edit Gudang Telur</h2>
+
 <div class="card">
     <div class="card-body">
         <form action="{{ route('gudang-telur.update', $gudangTelur) }}" method="POST">
@@ -6109,7 +6312,6 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
             <a href="{{ route('penjualan-telur.index') }}" class="{{ request()->is('penjualan-telur*') ? 'active' : '' }}">
                 <i class="bi bi-cash-stack"></i> Penjualan Telur
             </a>
-            {{-- ✅ TAMBAHAN: STOK & GUDANG TELUR --}}
             <a href="{{ route('stok-telur.index') }}" class="{{ request()->is('stok-telur*') ? 'active' : '' }}">
                 <i class="bi bi-boxes"></i> Stok Telur
             </a>
@@ -8417,7 +8619,6 @@ hitungSisa();
 
 @section('content')
 <h2 class="mb-3">Tambah Produksi Telur</h2>
-
 <div class="card">
     <div class="card-body">
         <form action="{{ route('produksi-telur.store') }}" method="POST">
@@ -8439,7 +8640,6 @@ hitungSisa();
                         @endforeach
                     </select>
                 </div>
-
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Populasi</label>
                     <select name="populasi_id" id="populasi_id" class="form-select" required>
@@ -8451,7 +8651,19 @@ hitungSisa();
                         @endforeach
                     </select>
                 </div>
-
+                {{-- ✅ TAMBAHAN: GUDANG PENYIMPANAN --}}
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Gudang Penyimpanan</label>
+                    <select name="gudang_id" class="form-select">
+                        <option value="">-- Pilih Gudang (opsional) --</option>
+                        @foreach ($gudangs as $g)
+                            <option value="{{ $g->id }}" @selected(old('gudang_id') == $g->id)>
+                                {{ $g->nama }}
+                            </option>
+                        @endforeach
+                    </select>
+                    <div class="form-text">Telur produksi masuk ke stok gudang ini.</div>
+                </div>
                 <div class="col-md-3 mb-3">
                     <label class="form-label">Sisa Ayam (otomatis)</label>
                     <input type="text" id="info-sisa" class="form-control bg-light" readonly value="-">
@@ -8461,7 +8673,6 @@ hitungSisa();
                     <input type="text" id="info-persentase" class="form-control bg-light" readonly value="-">
                     <div class="form-text">= produksi ÷ populasi × 100</div>
                 </div>
-
                 <div class="col-md-4 mb-3">
                     <label class="form-label">Jumlah Produksi (butir)</label>
                     <input type="number" name="jumlah_produksi" id="jumlah_produksi"
@@ -8491,24 +8702,20 @@ hitungSisa();
         </form>
     </div>
 </div>
-
 <script>
-    const SISA = @js($sisaPopulasi);
-
-    function hitung() {
-        const popId    = document.getElementById('populasi_id').value;
-        const populasi = SISA[popId] ?? 0;
-        const produksi = parseInt(document.getElementById('jumlah_produksi').value || 0, 10) || 0;
-
-        document.getElementById('info-sisa').value =
-            populasi > 0 ? populasi.toLocaleString('id-ID') + ' ekor' : '-';
-        document.getElementById('info-persentase').value =
-            populasi > 0 ? (produksi / populasi * 100).toFixed(2) + ' %' : '-';
-    }
-
-    document.getElementById('populasi_id').addEventListener('change', hitung);
-    document.getElementById('jumlah_produksi').addEventListener('input', hitung);
-    hitung();
+const SISA = @js($sisaPopulasi);
+function hitung() {
+    const popId    = document.getElementById('populasi_id').value;
+    const populasi = SISA[popId] ?? 0;
+    const produksi = parseInt(document.getElementById('jumlah_produksi').value || 0, 10) || 0;
+    document.getElementById('info-sisa').value =
+        populasi > 0 ? populasi.toLocaleString('id-ID') + ' ekor' : '-';
+    document.getElementById('info-persentase').value =
+        populasi > 0 ? (produksi / populasi * 100).toFixed(2) + ' %' : '-';
+}
+document.getElementById('populasi_id').addEventListener('change', hitung);
+document.getElementById('jumlah_produksi').addEventListener('input', hitung);
+hitung();
 </script>
 @endsection
 
@@ -8520,7 +8727,6 @@ hitungSisa();
 
 @section('content')
 <h2 class="mb-3">Edit Produksi Telur</h2>
-
 <div class="card">
     <div class="card-body">
         <form action="{{ route('produksi-telur.update', $produksiTelur) }}" method="POST">
@@ -8542,7 +8748,6 @@ hitungSisa();
                         @endforeach
                     </select>
                 </div>
-
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Populasi</label>
                     <select name="populasi_id" id="populasi_id" class="form-select" required>
@@ -8553,7 +8758,19 @@ hitungSisa();
                         @endforeach
                     </select>
                 </div>
-
+                {{-- ✅ TAMBAHAN: GUDANG PENYIMPANAN --}}
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Gudang Penyimpanan</label>
+                    <select name="gudang_id" class="form-select">
+                        <option value="">-- Pilih Gudang (opsional) --</option>
+                        @foreach ($gudangs as $g)
+                            <option value="{{ $g->id }}" @selected(old('gudang_id', $produksiTelur->gudang_id) == $g->id)>
+                                {{ $g->nama }}
+                            </option>
+                        @endforeach
+                    </select>
+                    <div class="form-text">Telur produksi masuk ke stok gudang ini.</div>
+                </div>
                 <div class="col-md-3 mb-3">
                     <label class="form-label">Sisa Ayam (otomatis)</label>
                     <input type="text" id="info-sisa" class="form-control bg-light" readonly value="-">
@@ -8562,7 +8779,6 @@ hitungSisa();
                     <label class="form-label">Persentase (otomatis)</label>
                     <input type="text" id="info-persentase" class="form-control bg-light" readonly value="-">
                 </div>
-
                 <div class="col-md-4 mb-3">
                     <label class="form-label">Jumlah Produksi (butir)</label>
                     <input type="number" name="jumlah_produksi" id="jumlah_produksi" class="form-control"
@@ -8594,24 +8810,20 @@ hitungSisa();
         </form>
     </div>
 </div>
-
 <script>
-    const SISA = @js($sisaPopulasi);
-
-    function hitung() {
-        const popId    = document.getElementById('populasi_id').value;
-        const populasi = SISA[popId] ?? 0;
-        const produksi = parseInt(document.getElementById('jumlah_produksi').value || 0, 10) || 0;
-
-        document.getElementById('info-sisa').value =
-            populasi > 0 ? populasi.toLocaleString('id-ID') + ' ekor' : '-';
-        document.getElementById('info-persentase').value =
-            populasi > 0 ? (produksi / populasi * 100).toFixed(2) + ' %' : '-';
-    }
-
-    document.getElementById('populasi_id').addEventListener('change', hitung);
-    document.getElementById('jumlah_produksi').addEventListener('input', hitung);
-    hitung();
+const SISA = @js($sisaPopulasi);
+function hitung() {
+    const popId    = document.getElementById('populasi_id').value;
+    const populasi = SISA[popId] ?? 0;
+    const produksi = parseInt(document.getElementById('jumlah_produksi').value || 0, 10) || 0;
+    document.getElementById('info-sisa').value =
+        populasi > 0 ? populasi.toLocaleString('id-ID') + ' ekor' : '-';
+    document.getElementById('info-persentase').value =
+        populasi > 0 ? (produksi / populasi * 100).toFixed(2) + ' %' : '-';
+}
+document.getElementById('populasi_id').addEventListener('change', hitung);
+document.getElementById('jumlah_produksi').addEventListener('input', hitung);
+hitung();
 </script>
 @endsection
 
@@ -9098,7 +9310,7 @@ $kelasPersen = function ($p) {
     <div>
         <h2 class="mb-1">Stok Penyimpanan Telur</h2>
         <p class="text-muted small mb-0">
-            Stok = Produksi masuk − Penjualan keluar − Return ·
+            Stok = (Produksi + Stok Manual) − Penjualan − Return ·
             1 ikat = {{ \App\Models\GudangTelur::BUTIR_PER_IKAT }} butir
         </p>
     </div>
@@ -9137,38 +9349,141 @@ $kelasPersen = function ($p) {
         <div class="col-12">
             <div class="alert alert-light border">
                 Belum ada gudang.
-                <a href="{{ route('gudang-telur.create') }}" class="fw-bold">+ Tambah gudang</a>
-                dulu (mis. Gudang A & Gudang B), lalu pilih gudang saat input produksi/penjualan.
+                <a href="{{ route('gudang-telur.create') }}" class="fw-bold">+ Tambah gudang</a> dulu.
             </div>
         </div>
     @endforelse
 </div>
 
-<!-- ===== MUTASI TERBARU ===== -->
+<!-- ===== FORM TAMBAH STOK MANUAL + RETURN ===== -->
 <div class="row g-4 mb-4">
     <div class="col-md-6">
-        <div class="panel">
-            <div class="panel-header"><div class="panel-title">Telur Masuk (Produksi)</div></div>
+        <div class="panel h-100">
+            <div class="panel-header"><div class="panel-title">Tambah Stok Gudang (Manual)</div></div>
+            <form method="POST" action="{{ route('stok-telur.stok.store') }}">
+                @csrf
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label small">Tanggal</label>
+                        <input type="date" name="tanggal" class="form-control"
+                               value="{{ old('tanggal', date('Y-m-d')) }}" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">Gudang</label>
+                        <select name="gudang_id" class="form-select" required>
+                            <option value="">-- Pilih Gudang --</option>
+                            @foreach ($gudangs as $g)
+                                <option value="{{ $g->id }}" @selected(old('gudang_id') == $g->id)>{{ $g->nama }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">Jumlah (butir)</label>
+                        <input type="number" name="jumlah" class="form-control" min="1"
+                               value="{{ old('jumlah') }}" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">Keterangan (opsional)</label>
+                        <input type="text" name="keterangan" class="form-control"
+                               value="{{ old('keterangan') }}" placeholder="Misal: stok awal / penyesuaian">
+                    </div>
+                    <div class="col-12">
+                        <button class="btn btn-primary w-100">
+                            <i class="bi bi-plus-circle me-1"></i> Tambah Stok
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="panel h-100">
+            <div class="panel-header"><div class="panel-title">Catat Return Telur</div></div>
+            <form method="POST" action="{{ route('stok-telur.return.store') }}">
+                @csrf
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label small">Tanggal</label>
+                        <input type="date" name="tanggal" class="form-control"
+                               value="{{ old('tanggal', date('Y-m-d')) }}" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">Gudang</label>
+                        <select name="gudang_id" class="form-select" required>
+                            <option value="">-- Pilih Gudang --</option>
+                            @foreach ($gudangs as $g)
+                                <option value="{{ $g->id }}" @selected(old('gudang_id') == $g->id)>{{ $g->nama }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small">Jumlah (butir)</label>
+                        <input type="number" name="jumlah" class="form-control" min="1"
+                               value="{{ old('jumlah') }}" required>
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small">Alasan</label>
+                        <select name="alasan" class="form-select" required>
+                            <option value="Busuk" @selected(old('alasan') == 'Busuk')>Busuk</option>
+                            <option value="Pecah" @selected(old('alasan') == 'Pecah')>Pecah</option>
+                            <option value="Retak" @selected(old('alasan') == 'Retak')>Retak</option>
+                            <option value="Lainnya" @selected(old('alasan') == 'Lainnya')>Lainnya</option>
+                        </select>
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small">Keterangan</label>
+                        <input type="text" name="keterangan" class="form-control" value="{{ old('keterangan') }}">
+                    </div>
+                    <div class="col-12">
+                        <button class="btn btn-danger w-100">
+                            <i class="bi bi-arrow-return-left me-1"></i> Simpan Return
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MUTASI MASUK & KELUAR ===== -->
+<div class="row g-4 mb-4">
+    <div class="col-md-6">
+        <div class="panel h-100">
+            <div class="panel-header"><div class="panel-title">Telur Masuk (Produksi + Manual)</div></div>
             <div class="table-responsive">
                 <table class="table table-sm align-middle mb-0">
-                    <thead><tr><th>Tanggal</th><th>Gudang</th><th class="text-end">Jumlah (butir)</th></tr></thead>
+                    <thead><tr><th>Tanggal</th><th>Gudang</th><th>Sumber</th><th class="text-end">Jumlah</th><th></th></tr></thead>
                     <tbody>
-                        @forelse ($masukTerbaru as $m)
+                        @forelse ($masukGabungan as $m)
                             <tr>
-                                <td>{{ $m->tanggal->format('d/m/Y') }}</td>
-                                <td>{{ $m->gudang->nama ?? '-' }}</td>
-                                <td class="text-end fw-semibold text-success">+{{ number_format($m->jumlah_produksi) }}</td>
+                                <td>{{ $m['tanggal']->format('d/m/Y') }}</td>
+                                <td>{{ $m['gudang'] }}</td>
+                                <td>
+                                    <span class="badge {{ $m['id'] ? 'bg-secondary' : 'bg-info text-dark' }}">{{ $m['sumber'] }}</span>
+                                </td>
+                                <td class="text-end fw-semibold text-success">+{{ number_format($m['jumlah']) }}</td>
+                                <td class="text-end">
+                                    @if ($m['id'])
+                                        <form action="{{ route('stok-telur.stok.destroy', $m['id']) }}" method="POST"
+                                              onsubmit="return confirm('Hapus catatan stok manual ini?')">
+                                            @csrf @method('DELETE')
+                                            <button class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    @endif
+                                </td>
                             </tr>
                         @empty
-                            <tr><td colspan="3" class="text-center text-muted">Belum ada produksi yang dipilih gudangnya.</td></tr>
+                            <tr><td colspan="5" class="text-center text-muted">Belum ada telur masuk.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
+
     <div class="col-md-6">
-        <div class="panel">
+        <div class="panel h-100">
             <div class="panel-header"><div class="panel-title">Telur Keluar (Penjualan)</div></div>
             <div class="table-responsive">
                 <table class="table table-sm align-middle mb-0">
@@ -9180,11 +9495,13 @@ $kelasPersen = function ($p) {
                                 <td>{{ $k->gudang->nama ?? '-' }}</td>
                                 <td class="text-end fw-semibold text-danger">
                                     −{{ number_format($k->jumlah) }} ikat
-                                    ({{ number_format($k->jumlah * \App\Models\GudangTelur::BUTIR_PER_IKAT) }} butir)
+                                    <span class="text-muted small d-block">
+                                        ({{ number_format($k->jumlah * \App\Models\GudangTelur::BUTIR_PER_IKAT) }} butir)
+                                    </span>
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="3" class="text-center text-muted">Belum ada penjualan yang dipilih gudangnya.</td></tr>
+                            <tr><td colspan="3" class="text-center text-muted">Belum ada penjualan dari gudang.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -9193,83 +9510,38 @@ $kelasPersen = function ($p) {
     </div>
 </div>
 
-<!-- ===== RETURN TELUR ===== -->
-<div class="row g-4">
-    <div class="col-md-4">
-        <div class="panel">
-            <div class="panel-header"><div class="panel-title">Catat Return Telur</div></div>
-            <form method="POST" action="{{ route('stok-telur.return.store') }}">
-                @csrf
-                <div class="mb-2">
-                    <label class="form-label small">Tanggal</label>
-                    <input type="date" name="tanggal" class="form-control" value="{{ old('tanggal', date('Y-m-d')) }}" required>
-                </div>
-                <div class="mb-2">
-                    <label class="form-label small">Gudang</label>
-                    <select name="gudang_id" class="form-select" required>
-                        <option value="">-- Pilih Gudang --</option>
-                        @foreach ($gudangs as $g)
-                            <option value="{{ $g->id }}" @selected(old('gudang_id') == $g->id)>{{ $g->nama }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="mb-2">
-                    <label class="form-label small">Jumlah (butir)</label>
-                    <input type="number" name="jumlah" class="form-control" value="{{ old('jumlah') }}" min="1" required>
-                </div>
-                <div class="mb-2">
-                    <label class="form-label small">Alasan</label>
-                    <select name="alasan" class="form-select" required>
-                        <option value="Busuk" @selected(old('alasan') == 'Busuk')>Busuk</option>
-                        <option value="Pecah" @selected(old('alasan') == 'Pecah')>Pecah</option>
-                        <option value="Retak" @selected(old('alasan') == 'Retak')>Retak</option>
-                        <option value="Lainnya" @selected(old('alasan') == 'Lainnya')>Lainnya</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label small">Keterangan (opsional)</label>
-                    <input type="text" name="keterangan" class="form-control" value="{{ old('keterangan') }}">
-                </div>
-                <button class="btn btn-danger w-100">
-                    <i class="bi bi-arrow-return-left me-1"></i> Simpan Return
-                </button>
-            </form>
-        </div>
-    </div>
-    <div class="col-md-8">
-        <div class="panel">
-            <div class="panel-header"><div class="panel-title">Riwayat Return Telur</div></div>
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th>Tanggal</th><th>Gudang</th><th class="text-end">Jumlah</th>
-                            <th>Alasan</th><th>Keterangan</th><th class="text-end">Aksi</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse ($returns as $r)
-                            <tr>
-                                <td>{{ $r->tanggal->format('d/m/Y') }}</td>
-                                <td>{{ $r->gudang->nama ?? '-' }}</td>
-                                <td class="text-end fw-semibold text-danger">−{{ number_format($r->jumlah) }}</td>
-                                <td><span class="badge bg-warning text-dark">{{ $r->alasan }}</span></td>
-                                <td>{{ $r->keterangan ?? '-' }}</td>
-                                <td class="text-end">
-                                    <form action="{{ route('stok-telur.return.destroy', $r) }}" method="POST"
-                                          onsubmit="return confirm('Hapus data return ini?')">
-                                        @csrf @method('DELETE')
-                                        <button class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></button>
-                                    </form>
-                                </td>
-                            </tr>
-                        @empty
-                            <tr><td colspan="6" class="text-center text-muted py-4">Belum ada return telur.</td></tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-        </div>
+<!-- ===== RIWAYAT RETURN ===== -->
+<div class="panel">
+    <div class="panel-header"><div class="panel-title">Riwayat Return Telur</div></div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Tanggal</th><th>Gudang</th><th class="text-end">Jumlah</th>
+                    <th>Alasan</th><th>Keterangan</th><th class="text-end">Aksi</th>
+                </tr>
+            </thead>
+            <tbody>
+                @forelse ($returns as $r)
+                    <tr>
+                        <td>{{ $r->tanggal->format('d/m/Y') }}</td>
+                        <td>{{ $r->gudang->nama ?? '-' }}</td>
+                        <td class="text-end fw-semibold text-danger">−{{ number_format($r->jumlah) }}</td>
+                        <td><span class="badge bg-warning text-dark">{{ $r->alasan }}</span></td>
+                        <td>{{ $r->keterangan ?? '-' }}</td>
+                        <td class="text-end">
+                            <form action="{{ route('stok-telur.return.destroy', $r) }}" method="POST"
+                                  onsubmit="return confirm('Hapus data return ini?')">
+                                @csrf @method('DELETE')
+                                <button class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                @empty
+                    <tr><td colspan="6" class="text-center text-muted py-4">Belum ada return telur.</td></tr>
+                @endforelse
+            </tbody>
+        </table>
     </div>
 </div>
 @endsection

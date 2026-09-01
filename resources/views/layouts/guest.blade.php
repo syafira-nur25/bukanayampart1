@@ -21,6 +21,5 @@
             ← Kembali ke beranda
         </a>
     </div>
-@include('partials.cursor-animation')
 </body>
 </html>

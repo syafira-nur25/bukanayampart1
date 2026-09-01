@@ -3,257 +3,320 @@
 @section('title', 'Input Laporan Harian')
 
 @section('content')
-<div class="card border-0 shadow-sm">
-    <div class="card-body p-4">
-        <h5 class="fw-bold mb-1">Laporan Harian</h5>
-        <p class="text-muted small mb-3">
-            Data populasi diambil <strong>otomatis dari input admin</strong>.
-            Anda cukup mengisi data harian (mati, afkir, pakan, telur).
-        </p>
+<style>
+.form-card {
+  background: #fff; border: 1px solid var(--border); border-radius: 20px;
+  box-shadow: 0 12px 40px rgba(93,64,55,.12); overflow: hidden;
+}
+.stepper-panel {
+  background: var(--primary-soft); padding: 28px 24px;
+  border-right: 1px solid var(--border);
+}
+.stepper-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+.stepper-brand .logo {
+  width: 38px; height: 38px; border-radius: 10px; background: #fff;
+  color: var(--primary); display: flex; align-items: center; justify-content: center;
+  font-size: 18px; box-shadow: 0 2px 8px rgba(93,64,55,.15);
+}
+.stepper-title { font-size: 17px; font-weight: 800; }
 
-        <!-- PANEL INFO POPULASI ADMIN -->
-        <div class="alert alert-info py-3 mb-4">
-            <div class="row text-center g-2">
-                <div class="col-3">
-                    <div class="small text-muted">Populasi (admin)</div>
-                    <div class="fs-4 fw-bold" id="info-hidup">-</div>
-                    <div class="small">ekor</div>
-                </div>
-                <div class="col-3">
-                    <div class="small text-muted">Perkiraan Sisa</div>
-                    <div class="fs-4 fw-bold text-success" id="info-sisa">-</div>
-                    <div class="small">ekor</div>
-                </div>
-                <div class="col-3">
-                    <div class="small text-muted">Usia</div>
-                    <div class="fs-4 fw-bold" id="info-usia">-</div>
-                    <div class="small">minggu</div>
-                </div>
-                <div class="col-3">
-                    <div class="small text-muted">Data Per Tanggal</div>
-                    <div class="fw-bold" id="info-tanggal">-</div>
-                    <div class="small">&nbsp;</div>
-                </div>
+.stepper { list-style: none; margin: 0; padding: 0; }
+.step {
+  display: flex; align-items: center; gap: 12px; padding: 9px 0;
+  color: var(--muted); font-size: 13.5px; font-weight: 600;
+  position: relative; cursor: pointer; transition: .2s;
+}
+.step .dot {
+  width: 27px; height: 27px; border-radius: 50%;
+  border: 2px solid #d8c9b8; background: #fff; color: var(--muted);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; flex-shrink: 0; transition: .2s;
+}
+.step:not(:last-child)::before {
+  content: ''; position: absolute; left: 13px; top: 40px; bottom: -4px;
+  width: 2px; background: #e0d2c0;
+}
+.step.active { color: var(--text); }
+.step.active .dot, .step.done .dot {
+  border-color: var(--primary); background: var(--primary); color: #fff;
+}
+
+.pop-info { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-top: 22px; }
+.pop-info .sec-title { margin-bottom: 10px; }
+
+.form-panel { padding: 28px 26px; }
+.sec-title {
+  font-size: 11px; font-weight: 700; letter-spacing: .8px;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 14px;
+}
+.form-section { padding-bottom: 22px; margin-bottom: 22px; border-bottom: 1px dashed var(--border); }
+.form-section:last-of-type { border-bottom: 0; margin-bottom: 0; padding-bottom: 0; }
+
+.form-panel .form-control, .form-panel .form-select {
+  background: #faf7f2; border: 1px solid var(--border); border-radius: 10px;
+}
+.form-panel .form-control:focus, .form-panel .form-select:focus {
+  background: #fff; border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(109,76,65,.12);
+}
+
+.btn-pill {
+  border: none; border-radius: 999px; padding: 11px 28px;
+  background: var(--primary); color: #fff; font-weight: 700; font-size: 14px;
+  box-shadow: 0 6px 16px rgba(93,64,55,.3); transition: .2s;
+}
+.btn-pill:hover { background: var(--primary-dark); transform: translateY(-1px); }
+
+@media (max-width: 767px) {
+  .stepper-panel { border-right: 0; border-bottom: 1px solid var(--border); padding: 20px; }
+  .stepper { display: flex; gap: 4px; justify-content: space-between; }
+  .step { flex-direction: column; gap: 6px; font-size: 10.5px; text-align: center; padding: 0; }
+  .step:not(:last-child)::before { display: none; }
+  .pop-info { margin-top: 16px; }
+  .form-panel { padding: 20px; }
+}
+</style>
+
+<div class="form-card">
+  <div class="row g-0">
+
+    {{-- ===== PANEL KIRI: STEPPER ===== --}}
+    <aside class="col-md-4 stepper-panel">
+      <div class="stepper-brand">
+        <div class="logo"><i class="bi bi-egg-fried"></i></div>
+        <div class="stepper-title">Laporan Harian</div>
+      </div>
+
+      <ol class="stepper" id="stepper">
+        <li class="step active" data-target="sec-1"><span class="dot">1</span> Identitas</li>
+        <li class="step" data-target="sec-2"><span class="dot">2</span> Populasi</li>
+        <li class="step" data-target="sec-3"><span class="dot">3</span> Pakan & Produksi</li>
+        <li class="step" data-target="sec-4"><span class="dot">4</span> Catatan</li>
+      </ol>
+
+      {{-- INFO POPULASI DARI ADMIN --}}
+      <div class="pop-info">
+        <div class="sec-title">Info Populasi (Admin)</div>
+        <div class="row text-center g-2">
+          <div class="col-3">
+            <div class="fw-bold" id="info-hidup">-</div>
+            <div class="small text-muted">Hidup</div>
+          </div>
+          <div class="col-3">
+            <div class="fw-bold text-success" id="info-sisa">-</div>
+            <div class="small text-muted">Sisa</div>
+          </div>
+          <div class="col-3">
+            <div class="fw-bold" id="info-usia">-</div>
+            <div class="small text-muted">Minggu</div>
+          </div>
+          <div class="col-3">
+            <div class="fw-bold small" id="info-tanggal">-</div>
+            <div class="small text-muted">Tgl Data</div>
+          </div>
+        </div>
+        <div class="small mt-2 mb-0" id="info-keterangan">
+          <i class="bi bi-info-circle me-1"></i> Silakan pilih kandang terlebih dahulu.
+        </div>
+      </div>
+    </aside>
+
+    {{-- ===== PANEL KANAN: FORM ===== --}}
+    <div class="col-md-8 form-panel">
+      <form action="{{ route('manpower.laporan.store') }}" method="POST">
+        @csrf
+
+        {{-- SECTION 1 --}}
+        <div class="form-section" id="sec-1">
+          <div class="sec-title">Identitas Laporan</div>
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-label small">Tanggal</label>
+              <input type="date" name="tanggal" class="form-control"
+                value="{{ old('tanggal', date('Y-m-d')) }}" required>
             </div>
-            <div class="small mt-2 mb-0" id="info-keterangan">
-                <i class="bi bi-info-circle me-1"></i> Silakan pilih kandang terlebih dahulu.
+            <div class="col-6">
+              <label class="form-label small">Kandang</label>
+              <select name="kandang_id" class="form-select" required>
+                <option value="">-- Pilih Kandang --</option>
+                @foreach ($kandangs as $kandang)
+                  <option value="{{ $kandang->id }}" @selected(old('kandang_id') == $kandang->id)>
+                    {{ $kandang->nama }}
+                  </option>
+                @endforeach
+              </select>
             </div>
+          </div>
         </div>
 
-        <form action="{{ route('manpower.laporan.store') }}" method="POST">
-            @csrf
-
-            {{-- ===== SECTION 1: IDENTITAS ===== --}}
-            <div class="border-bottom pb-3 mb-3">
-                <div class="small fw-bold text-muted mb-2">
-                    <i class="bi bi-1-circle-fill me-1"></i> Identitas Laporan
-                </div>
-                <div class="row g-3">
-                    <div class="col-6">
-                        <label class="form-label">Tanggal</label>
-                        <input type="date" name="tanggal" class="form-control"
-                            value="{{ old('tanggal', date('Y-m-d')) }}" required>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label">Kandang</label>
-                        <select name="kandang_id" class="form-select" required>
-                            <option value="">-- Pilih Kandang --</option>
-                            @foreach ($kandangs as $kandang)
-                                <option value="{{ $kandang->id }}" @selected(old('kandang_id') == $kandang->id)>
-                                    {{ $kandang->nama }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                </div>
+        {{-- SECTION 2 --}}
+        <div class="form-section" id="sec-2">
+          <div class="sec-title">Data Populasi <span class="badge bg-secondary ms-1">Otomatis</span></div>
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-label small">Populasi Awal (ekor)</label>
+              <input type="number" name="hidup" id="input-hidup" class="form-control"
+                value="{{ old('hidup', 0) }}" min="0" readonly required>
+              <div class="form-text" id="hint-hidup">Diambil otomatis dari data populasi admin.</div>
             </div>
-
-            {{-- ===== SECTION 2: POPULASI ===== --}}
-            <div class="border-bottom pb-3 mb-3">
-                <div class="small fw-bold text-muted mb-2">
-                    <i class="bi bi-2-circle-fill me-1"></i> Data Populasi
-                    <span class="badge bg-secondary ms-1">Dari data admin</span>
-                </div>
-                <div class="row g-3">
-                    <div class="col-6">
-                        <label class="form-label">Populasi Awal (ekor)</label>
-                        <input type="number" name="hidup" id="input-hidup" class="form-control bg-light"
-                            value="{{ old('hidup', 0) }}" min="0" readonly required>
-                        <div class="form-text" id="hint-hidup">
-                            Diambil otomatis dari data populasi admin.
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label">
-                            Umur Ayam (minggu)
-                            <span class="badge bg-secondary ms-1">Otomatis</span>
-                        </label>
-                        <input type="number" name="umur_minggu" id="input-umur" class="form-control bg-light"
-                            value="{{ old('umur_minggu', 0) }}" min="0" readonly required>
-                        <div class="form-text" id="hint-umur">
-                            Dihitung otomatis dari usia populasi admin.
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label">Mati (ekor)</label>
-                        <input type="number" name="mati" class="form-control"
-                            value="{{ old('mati', 0) }}" min="0" required>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label">Afkir (ekor)</label>
-                        <input type="number" name="afkir" class="form-control"
-                            value="{{ old('afkir', 0) }}" min="0" required>
-                        <div class="form-text text-muted">Hanya dicatat, tidak mengurangi sisa.</div>
-                    </div>
-                </div>
+            <div class="col-6">
+              <label class="form-label small">Umur Ayam (minggu)</label>
+              <input type="number" name="umur_minggu" id="input-umur" class="form-control"
+                value="{{ old('umur_minggu', 0) }}" min="0" readonly required>
+              <div class="form-text" id="hint-umur">Dihitung otomatis dari usia populasi admin.</div>
             </div>
-
-            {{-- ===== SECTION 3: PAKAN & PRODUKSI ===== --}}
-            <div class="border-bottom pb-3 mb-3">
-                <div class="small fw-bold text-muted mb-2">
-                    <i class="bi bi-3-circle-fill me-1"></i> Pakan & Produksi Telur
-                </div>
-                <div class="row g-3">
-                    <div class="col-12">
-                        <label class="form-label">Total Pakan (kg)</label>
-                        <input type="number" step="0.01" name="total_pakan" class="form-control"
-                            value="{{ old('total_pakan') }}" min="0" required>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label">Telur Bagus (butir)</label>
-                        <input type="number" name="produksi_telur" id="telur-bagus" class="form-control"
-                            value="{{ old('produksi_telur', 0) }}" min="0" required>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label">Telur Pecah / Reject (butir)</label>
-                        <input type="number" name="telur_pecah" id="telur-pecah" class="form-control"
-                            value="{{ old('telur_pecah', 0) }}" min="0" required>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label">
-                            Total Produksi (butir)
-                            <span class="badge bg-secondary ms-1">Otomatis</span>
-                        </label>
-                        <input type="text" id="total-produksi" class="form-control bg-light fw-bold text-success"
-                            readonly value="0 butir">
-                        <div class="form-text">= Telur Bagus + Telur Pecah (otomatis)</div>
-                    </div>
-                </div>
+            <div class="col-6">
+              <label class="form-label small">Mati (ekor)</label>
+              <input type="number" name="mati" class="form-control"
+                value="{{ old('mati', 0) }}" min="0" required>
             </div>
-
-            {{-- ===== SECTION 4: CATATAN ===== --}}
-            <div class="pb-3 mb-3">
-                <div class="small fw-bold text-muted mb-2">
-                    <i class="bi bi-4-circle-fill me-1"></i> Catatan Tambahan (opsional)
-                </div>
-                <input type="text" name="column_10" class="form-control"
-                    value="{{ old('column_10') }}"
-                    placeholder="Misal: cuaca mendung, ada gangguan predator, dll.">
+            <div class="col-6">
+              <label class="form-label small">Afkir (ekor)</label>
+              <input type="number" name="afkir" class="form-control"
+                value="{{ old('afkir', 0) }}" min="0" required>
+              <div class="form-text text-muted">Hanya dicatat, tidak mengurangi sisa.</div>
             </div>
+          </div>
+        </div>
 
-            <div class="d-grid mt-4">
-                <button class="btn btn-success">
-                    <i class="bi bi-save me-1"></i> Simpan Laporan
-                </button>
+        {{-- SECTION 3 --}}
+        <div class="form-section" id="sec-3">
+          <div class="sec-title">Pakan & Produksi Telur</div>
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label small">Total Pakan (kg)</label>
+              <input type="number" step="0.01" name="total_pakan" class="form-control"
+                value="{{ old('total_pakan') }}" min="0" required>
             </div>
-        </form>
+            <div class="col-6">
+              <label class="form-label small">Telur Bagus (butir)</label>
+              <input type="number" name="produksi_telur" id="telur-bagus" class="form-control"
+                value="{{ old('produksi_telur', 0) }}" min="0" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label small">Telur Pecah / Reject (butir)</label>
+              <input type="number" name="telur_pecah" id="telur-pecah" class="form-control"
+                value="{{ old('telur_pecah', 0) }}" min="0" required>
+            </div>
+            <div class="col-12">
+              <label class="form-label small">Total Produksi (butir) — otomatis</label>
+              <input type="text" id="total-produksi" class="form-control fw-bold text-success"
+                readonly value="0 butir">
+            </div>
+          </div>
+        </div>
+
+        {{-- SECTION 4 --}}
+        <div class="form-section" id="sec-4">
+          <div class="sec-title">Catatan Tambahan (opsional)</div>
+          <input type="text" name="column_10" class="form-control"
+            value="{{ old('column_10') }}"
+            placeholder="Misal: cuaca mendung, ada gangguan predator, dll.">
+        </div>
+
+        <div class="d-flex justify-content-end mt-4">
+          <button type="submit" class="btn-pill">
+            Simpan Laporan <i class="bi bi-arrow-right ms-1"></i>
+          </button>
+        </div>
+      </form>
     </div>
+
+  </div>
 </div>
 
 <script>
+/* ===== LOGIKA OTOMATIS POPULASI (sama seperti sebelumnya) ===== */
 const POPULASI = @js($populasiTerakhir);
 const TODAY    = @js($today);
 
-function angka(el) {
-    return parseInt(el.value || 0, 10) || 0;
-}
-
+function angka(el) { return parseInt(el.value || 0, 10) || 0; }
 function hariAntara(t1, t2) {
-    if (!t1 || !t2) return 0;
-    return Math.max(0, Math.round((new Date(t2) - new Date(t1)) / 86400000));
+  if (!t1 || !t2) return 0;
+  return Math.max(0, Math.round((new Date(t2) - new Date(t1)) / 86400000));
 }
-
 function updateInfo() {
-    const kandangId  = document.querySelector('[name="kandang_id"]').value;
-    const data       = POPULASI[kandangId] || null;
-    const inputHidup = document.getElementById('input-hidup');
-    const inputUmur  = document.getElementById('input-umur');
-    const hintHidup  = document.getElementById('hint-hidup');
-    const hintUmur   = document.getElementById('hint-umur');
-    const ket        = document.getElementById('info-keterangan');
+  const kandangId  = document.querySelector('[name="kandang_id"]').value;
+  const data       = POPULASI[kandangId] || null;
+  const inputHidup = document.getElementById('input-hidup');
+  const inputUmur  = document.getElementById('input-umur');
+  const hintHidup  = document.getElementById('hint-hidup');
+  const hintUmur   = document.getElementById('hint-umur');
+  const ket        = document.getElementById('info-keterangan');
 
-    if (data) {
-        // ✅ Populasi awal = sisa dari data admin
-        inputHidup.value    = data.sisa;
-        inputHidup.readOnly = true;
-        inputHidup.classList.add('bg-light', 'text-muted');
-        hintHidup.textContent = 'Otomatis dari data populasi admin (sisa: ' + data.sisa.toLocaleString('id-ID') + ' ekor).';
-
-        // ✅ Usia otomatis (minggu) dari data admin
-        const hariLalu   = hariAntara(data.tanggal_dasar, TODAY);
-        const usiaHari   = (data.usia_dasar || 0) + hariLalu;
-        const usiaMinggu = Math.floor(usiaHari / 7);
-        inputUmur.value  = usiaMinggu;
-        inputUmur.readOnly = true;
-        inputUmur.classList.add('bg-light', 'text-muted');
-        hintUmur.textContent = 'Usia dasar ' + (data.usia_dasar || 0) + ' hari + ' + hariLalu + ' hari = ' + usiaHari + ' hari (' + usiaMinggu + ' minggu).';
-
-        ket.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i>' +
-            'Data populasi dari admin berhasil dimuat. Populasi & usia bersifat <strong>read-only</strong>.';
-
-        // Info panel
-        document.getElementById('info-hidup').textContent   = data.sisa.toLocaleString('id-ID');
-        document.getElementById('info-usia').textContent     = usiaMinggu;
-        document.getElementById('info-tanggal').textContent  = data.tanggal;
-
+  if (data) {
+    inputHidup.value = data.sisa; inputHidup.readOnly = true;
+    hintHidup.textContent = 'Otomatis dari data populasi admin (sisa: ' + data.sisa.toLocaleString('id-ID') + ' ekor).';
+    const hariLalu   = hariAntara(data.tanggal_dasar, TODAY);
+    const usiaHari   = (data.usia_dasar || 0) + hariLalu;
+    const usiaMinggu = Math.floor(usiaHari / 7);
+    inputUmur.value = usiaMinggu; inputUmur.readOnly = true;
+    hintUmur.textContent = 'Usia dasar ' + (data.usia_dasar || 0) + ' hari + ' + hariLalu + ' hari = ' + usiaHari + ' hari.';
+    ket.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i>Data populasi dimuat. Populasi & usia read-only.';
+    document.getElementById('info-hidup').textContent  = data.sisa.toLocaleString('id-ID');
+    document.getElementById('info-sisa').textContent   = data.sisa.toLocaleString('id-ID');
+    document.getElementById('info-usia').textContent   = usiaMinggu;
+    document.getElementById('info-tanggal').textContent = data.tanggal;
+  } else {
+    inputHidup.readOnly = false; inputUmur.readOnly = false; inputUmur.value = 0;
+    if (kandangId) {
+      hintHidup.textContent = 'Admin belum input populasi untuk kandang ini — isi manual.';
+      hintUmur.textContent  = 'Admin belum input populasi — isi umur (minggu) manual.';
+      ket.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>Belum ada data populasi dari admin.';
     } else {
-        // Belum ada data admin → input manual
-        inputHidup.readOnly = false;
-        inputHidup.classList.remove('bg-light', 'text-muted');
-        inputUmur.readOnly  = false;
-        inputUmur.classList.remove('bg-light', 'text-muted');
-        inputUmur.value = 0;
-
-        if (kandangId) {
-            hintHidup.textContent = 'Admin belum input populasi untuk kandang ini — isi manual.';
-            hintUmur.textContent  = 'Admin belum input populasi — isi umur (minggu) manual.';
-            ket.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>' +
-                'Belum ada data populasi dari admin untuk kandang ini. Hubungi admin atau isi manual.';
-        } else {
-            hintHidup.textContent = 'Diambil otomatis dari data populasi admin.';
-            hintUmur.textContent  = 'Dihitung otomatis dari usia populasi admin.';
-            ket.innerHTML = '<i class="bi bi-info-circle me-1"></i> Silakan pilih kandang terlebih dahulu.';
-        }
-
-        document.getElementById('info-hidup').textContent   = '-';
-        document.getElementById('info-usia').textContent     = '-';
-        document.getElementById('info-tanggal').textContent  = '-';
+      hintHidup.textContent = 'Diambil otomatis dari data populasi admin.';
+      hintUmur.textContent  = 'Dihitung otomatis dari usia populasi admin.';
+      ket.innerHTML = '<i class="bi bi-info-circle me-1"></i> Silakan pilih kandang terlebih dahulu.';
     }
-
-    // Hitung perkiraan sisa
-    const hidup = angka(inputHidup);
-    const mati  = angka(document.querySelector('[name="mati"]'));
-    document.getElementById('info-sisa').textContent =
-        kandangId ? Math.max(0, hidup - mati).toLocaleString('id-ID') : '-';
+    document.getElementById('info-hidup').textContent  = '-';
+    document.getElementById('info-sisa').textContent   = '-';
+    document.getElementById('info-usia').textContent   = '-';
+    document.getElementById('info-tanggal').textContent = '-';
+  }
+  const hidup = angka(inputHidup);
+  const mati  = angka(document.querySelector('[name="mati"]'));
+  document.getElementById('info-sisa').textContent =
+    kandangId ? Math.max(0, hidup - mati).toLocaleString('id-ID') : '-';
 }
-
 function hitungTotalProduksi() {
-    const bagus = angka(document.getElementById('telur-bagus'));
-    const pecah = angka(document.getElementById('telur-pecah'));
-    document.getElementById('total-produksi').value =
-        (bagus + pecah).toLocaleString('id-ID') + ' butir';
+  const bagus = angka(document.getElementById('telur-bagus'));
+  const pecah = angka(document.getElementById('telur-pecah'));
+  document.getElementById('total-produksi').value =
+    (bagus + pecah).toLocaleString('id-ID') + ' butir';
 }
-
-// Event listeners
 document.querySelector('[name="kandang_id"]').addEventListener('change', updateInfo);
 document.getElementById('input-hidup').addEventListener('input', updateInfo);
 document.querySelector('[name="mati"]').addEventListener('input', updateInfo);
 document.querySelector('[name="afkir"]').addEventListener('input', updateInfo);
 document.getElementById('telur-bagus').addEventListener('input', hitungTotalProduksi);
 document.getElementById('telur-pecah').addEventListener('input', hitungTotalProduksi);
-
-// Init
 updateInfo();
 hitungTotalProduksi();
+
+/* ===== STEPPER: klik = scroll, aktif mengikuti scroll ===== */
+(function () {
+  const steps = document.querySelectorAll('#stepper .step');
+  const secs  = Array.from(steps).map(s => document.getElementById(s.dataset.target));
+
+  steps.forEach((s, i) => {
+    s.addEventListener('click', () => {
+      if (secs[i]) secs[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  });
+
+  function onScroll() {
+    let current = 0;
+    secs.forEach((sec, i) => {
+      if (sec && sec.getBoundingClientRect().top < window.innerHeight * 0.45) current = i;
+    });
+    steps.forEach((s, i) => {
+      s.classList.toggle('active', i === current);
+      s.classList.toggle('done', i < current);
+      s.querySelector('.dot').textContent = i < current ? '✓' : (i + 1);
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
 </script>
 @endsection
