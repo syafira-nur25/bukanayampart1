@@ -9,7 +9,7 @@ class GudangTelur extends Model
 {
     const BUTIR_PER_PIRING = 30;
     const PIRING_PER_IKAT  = 5;
-    const BUTIR_PER_IKAT   = self::BUTIR_PER_PIRING * self::PIRING_PER_IKAT; // 150 butir
+    const BUTIR_PER_IKAT   = self::BUTIR_PER_PIRING * self::PIRING_PER_IKAT;
 
     protected $table = 'gudang_telur';
     protected $fillable = ['nama', 'lokasi'];

@@ -3,6 +3,13 @@
 @section('title', 'Dashboard')
 
 @section('content')
+<style>
+/* ✅ Biar setelah ganti filter, halaman berhenti pas di grafiknya (tidak ketutup topbar) */
+#chart-produksi, #chart-penjualan, #chart-kematian {
+    scroll-margin-top: 95px;
+}
+</style>
+
 <div class="mb-4">
     <h3 class="fw-bold mb-1">Dashboard Peternakan</h3>
     <p class="text-muted mb-0">Pantau kondisi peternakan — tiap grafik punya filter bulannya sendiri.</p>
@@ -61,7 +68,7 @@
 </div>
 
 <!-- ===== GRAFIK PRODUKSI + AKSES CEPAT ===== -->
-<div class="row g-4 mb-4">
+<div class="row g-4 mb-4" id="chart-produksi">
     <div class="col-xl-8">
         <div class="panel">
             <div class="panel-header">
@@ -70,11 +77,12 @@
                     <div class="text-muted small">Harian — {{ $labelBulanProduksi }}</div>
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                    {{-- FILTER BULAN: PRODUKSI --}}
-                    <form method="GET" class="m-0">
+                    {{-- ✅ FILTER BULAN: PRODUKSI (action pakai anchor biar tetap di sini) --}}
+                    <form method="GET" class="m-0" action="#chart-produksi">
                         <input type="hidden" name="bulan_penjualan" value="{{ $bulanPenjualan }}">
                         <input type="hidden" name="bulan_kematian" value="{{ $bulanKematian }}">
                         <select name="bulan_produksi" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+                            <option value="all" @selected($bulanProduksi === 'all')>Semua Bulan</option>
                             @foreach ($daftarBulanProduksi as $b)
                                 <option value="{{ $b }}" @selected($b === $bulanProduksi)>
                                     {{ $namaBulan[(int) substr($b, 5, 2)] }} {{ substr($b, 0, 4) }}
@@ -120,7 +128,7 @@
 </div>
 
 <!-- ===== GRAFIK PENJUALAN ===== -->
-<div class="row g-4 mb-4">
+<div class="row g-4 mb-4" id="chart-penjualan">
     <div class="col-xl-8">
         <div class="panel">
             <div class="panel-header">
@@ -129,11 +137,12 @@
                     <div class="text-muted small">Harian — {{ $labelBulanPenjualan }} (Rp)</div>
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                    {{-- FILTER BULAN: PENJUALAN --}}
-                    <form method="GET" class="m-0">
+                    {{-- ✅ FILTER BULAN: PENJUALAN --}}
+                    <form method="GET" class="m-0" action="#chart-penjualan">
                         <input type="hidden" name="bulan_produksi" value="{{ $bulanProduksi }}">
                         <input type="hidden" name="bulan_kematian" value="{{ $bulanKematian }}">
                         <select name="bulan_penjualan" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+                            <option value="all" @selected($bulanPenjualan === 'all')>Semua Bulan</option>
                             @foreach ($daftarBulanPenjualan as $b)
                                 <option value="{{ $b }}" @selected($b === $bulanPenjualan)>
                                     {{ $namaBulan[(int) substr($b, 5, 2)] }} {{ substr($b, 0, 4) }}
@@ -151,7 +160,7 @@
         <div class="stat-card h-100 d-flex flex-column justify-content-center">
             <div class="stat-top">
                 <div>
-                    <div class="stat-label mt-0">Rata-rata / hari</div>
+                    <div class="stat-label mt-0">Rata-rata / {{ $bulanPenjualan === 'all' ? 'bulan' : 'hari' }}</div>
                     <div class="stat-value">Rp {{ number_format($avgSales, 0, ',', '.') }}</div>
                 </div>
                 <div class="stat-icon icon-green"><i class="bi bi-graph-up-arrow"></i></div>
@@ -164,7 +173,7 @@
 </div>
 
 <!-- ===== GRAFIK KEMATIAN ===== -->
-<div class="row g-4 mb-4">
+<div class="row g-4 mb-4" id="chart-kematian">
     <div class="col-12">
         <div class="panel">
             <div class="panel-header">
@@ -174,11 +183,12 @@
                         Mati & afkir harian — sumber: Data Populasi (input admin) — {{ $labelBulanKematian }}
                     </div>
                 </div>
-                {{-- FILTER BULAN: KEMATIAN --}}
-                <form method="GET" class="m-0">
+                {{-- ✅ FILTER BULAN: KEMATIAN --}}
+                <form method="GET" class="m-0" action="#chart-kematian">
                     <input type="hidden" name="bulan_produksi" value="{{ $bulanProduksi }}">
                     <input type="hidden" name="bulan_penjualan" value="{{ $bulanPenjualan }}">
                     <select name="bulan_kematian" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+                        <option value="all" @selected($bulanKematian === 'all')>Semua Bulan</option>
                         @foreach ($daftarBulanKematian as $b)
                             <option value="{{ $b }}" @selected($b === $bulanKematian)>
                                 {{ $namaBulan[(int) substr($b, 5, 2)] }} {{ substr($b, 0, 4) }}
@@ -320,5 +330,16 @@ new Chart(document.getElementById('mortalityChart'), {
         scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
     }
 });
+
+(function () {
+    if (window.location.hash) {
+        var el = document.querySelector(window.location.hash);
+        if (el) {
+            setTimeout(function () {
+                el.scrollIntoView({ behavior: 'auto', block: 'start' });
+            }, 60); 
+        }
+    }
+})();
 </script>
 @endpush

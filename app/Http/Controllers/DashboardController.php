@@ -34,57 +34,60 @@ class DashboardController extends Controller
         $labelBulanPenjualan = $this->labelBulan($bulanPenjualan);
         $labelBulanKematian  = $this->labelBulan($bulanKematian);
 
-        /* ===== 2. KARTU RINGKASAN (global / semua periode) ===== */
+        /* ===== 2. KARTU RINGKASAN (global) ===== */
         $totalKandang = Kandang::count();
-
         $totalAyam = Populasi::orderByDesc('tanggal')->orderByDesc('id')
-            ->get()
-            ->unique('kandang_id')   // sisakan 1 record terbaru per kandang
-            ->sum('sisa');
-
+            ->get()->unique('kandang_id')->sum('sisa');
         $totalTelur     = ProduksiTelur::sum('jumlah_produksi');
         $totalPenjualan = PenjualanTelur::sum('total');
+        $produksiTerbaru = ProduksiTelur::with(['kandang'])->latest('tanggal')->limit(10)->get();
 
-        $produksiTerbaru = ProduksiTelur::with(['kandang'])
-            ->latest('tanggal')->limit(10)->get();
-
-        /* ===== 3. GRAFIK PRODUKSI (filter sendiri) ===== */
+        /* ===== 3. GRAFIK PRODUKSI (harian / semua bulan) ===== */
         [$chartLabelsProduksi, $chartDataProduksi] = $this->buildChart(
             $bulanProduksi,
             ProduksiTelur::selectRaw('tanggal, SUM(jumlah_produksi) as total')
         );
 
-        /* ===== 4. GRAFIK PENJUALAN (filter sendiri) ===== */
+        /* ===== 4. GRAFIK PENJUALAN ===== */
         [$chartLabelsPenjualan, $chartDataPenjualan] = $this->buildChart(
             $bulanPenjualan,
             PenjualanTelur::selectRaw('tanggal, SUM(total) as total')
         );
 
-        /* ===== 5. GRAFIK KEMATIAN (filter sendiri, 2 dataset) ===== */
-        [$start, $end] = $this->rentangBulan($bulanKematian);
-
-        $kematianMap = Populasi::selectRaw('tanggal, SUM(mati) as mati, SUM(afkir) as afkir')
-            ->whereBetween('tanggal', [$start->toDateString(), $end->toDateString()])
-            ->groupBy('tanggal')
-            ->get()
-            ->keyBy(fn ($r) => Carbon::parse($r->tanggal)->toDateString());
-
+        /* ===== 5. GRAFIK KEMATIAN ===== */
         $chartLabelsKematian = [];
         $kematianMati  = [];
         $kematianAfkir = [];
-        $hari = $start->copy();
-        while ($hari <= $end) {
-            $key = $hari->toDateString();
-            $chartLabelsKematian[] = $hari->format('d M');
-            $kematianMati[]  = (int) ($kematianMap[$key]->mati ?? 0);
-            $kematianAfkir[] = (int) ($kematianMap[$key]->afkir ?? 0);
-            $hari->addDay();
+
+        if ($bulanKematian === 'all') {
+            $grouped = Populasi::selectRaw('tanggal, SUM(mati) as mati, SUM(afkir) as afkir')
+                ->groupBy('tanggal')->get()
+                ->groupBy(fn ($r) => Carbon::parse($r->tanggal)->format('Y-m'))
+                ->sortKeys();
+            foreach ($grouped as $ym => $items) {
+                $chartLabelsKematian[] = $this->labelBulan($ym);
+                $kematianMati[]  = (int) $items->sum('mati');
+                $kematianAfkir[] = (int) $items->sum('afkir');
+            }
+        } else {
+            [$start, $end] = $this->rentangBulan($bulanKematian);
+            $kematianMap = Populasi::selectRaw('tanggal, SUM(mati) as mati, SUM(afkir) as afkir')
+                ->whereBetween('tanggal', [$start->toDateString(), $end->toDateString()])
+                ->groupBy('tanggal')->get()
+                ->keyBy(fn ($r) => Carbon::parse($r->tanggal)->toDateString());
+            $hari = $start->copy();
+            while ($hari <= $end) {
+                $key = $hari->toDateString();
+                $chartLabelsKematian[] = $hari->format('d M');
+                $kematianMati[]  = (int) ($kematianMap[$key]->mati ?? 0);
+                $kematianAfkir[] = (int) ($kematianMap[$key]->afkir ?? 0);
+                $hari->addDay();
+            }
         }
 
-        /* ===== 6. RINGKASAN PENJUALAN (ikut bulan penjualan terpilih) ===== */
+        /* ===== 6. RINGKASAN PENJUALAN ===== */
         $avgSales = count($chartDataPenjualan) ? round(collect($chartDataPenjualan)->avg()) : 0;
         $sumSales = collect($chartDataPenjualan)->sum();
-
         $namaBulan = self::NAMA_BULAN;
 
         return view('dashboard', compact(
@@ -106,44 +109,52 @@ class DashboardController extends Controller
         return $tanggalCollection
             ->filter()
             ->map(fn ($t) => Carbon::parse($t)->format('Y-m'))
-            ->unique()
-            ->sortDesc()
-            ->values();
+            ->unique()->sortDesc()->values();
     }
 
+    /** ✅ Mendukung nilai 'all' */
     private function pilihBulan(?string $input, $daftar): string
     {
+        if ($input === 'all') return 'all';
         return ($input && $daftar->contains($input))
             ? $input
             : ($daftar->first() ?? Carbon::now()->format('Y-m'));
     }
 
-    /** ✅ Label bulan aman — tidak pakai createFromFormat('Y-m') */
     private function labelBulan(string $bulan): string
     {
+        if ($bulan === 'all') return 'Semua Bulan';
         [$tahun, $bln] = explode('-', $bulan);
         return self::NAMA_BULAN[(int) $bln] . ' ' . $tahun;
     }
 
-    /** ✅ Hari dipaksa '-01' supaya tidak luber ke bulan berikutnya */
     private function rentangBulan(string $bulan): array
     {
         $start = Carbon::createFromFormat('Y-m-d', $bulan . '-01')->startOfDay();
         return [$start, $start->copy()->endOfMonth()];
     }
 
-    /** Bangun [labels, data] harian untuk 1 bulan dari query SUM per tanggal */
+    /** ✅ 'all' → agregasi per bulan; selain itu harian */
     private function buildChart(string $bulan, $query): array
     {
-        [$start, $end] = $this->rentangBulan($bulan);
+        if ($bulan === 'all') {
+            $grouped = $query->groupBy('tanggal')->get()
+                ->groupBy(fn ($r) => Carbon::parse($r->tanggal)->format('Y-m'))
+                ->sortKeys();
+            $labels = [];
+            $data   = [];
+            foreach ($grouped as $ym => $items) {
+                $labels[] = $this->labelBulan($ym);
+                $data[]   = (int) $items->sum('total');
+            }
+            return [$labels, $data];
+        }
 
+        [$start, $end] = $this->rentangBulan($bulan);
         $map = $query
             ->whereBetween('tanggal', [$start->toDateString(), $end->toDateString()])
-            ->groupBy('tanggal')
-            ->get()
-            ->mapWithKeys(fn ($r) => [
-                Carbon::parse($r->tanggal)->toDateString() => (int) $r->total,
-            ]);
+            ->groupBy('tanggal')->get()
+            ->mapWithKeys(fn ($r) => [Carbon::parse($r->tanggal)->toDateString() => (int) $r->total]);
 
         $labels = [];
         $data   = [];
@@ -154,7 +165,6 @@ class DashboardController extends Controller
             $data[]   = (int) ($map[$key] ?? 0);
             $hari->addDay();
         }
-
         return [$labels, $data];
     }
 }

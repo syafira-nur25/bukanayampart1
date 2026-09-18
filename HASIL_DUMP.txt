@@ -452,57 +452,60 @@ class DashboardController extends Controller
         $labelBulanPenjualan = $this->labelBulan($bulanPenjualan);
         $labelBulanKematian  = $this->labelBulan($bulanKematian);
 
-        /* ===== 2. KARTU RINGKASAN (global / semua periode) ===== */
+        /* ===== 2. KARTU RINGKASAN (global) ===== */
         $totalKandang = Kandang::count();
-
         $totalAyam = Populasi::orderByDesc('tanggal')->orderByDesc('id')
-            ->get()
-            ->unique('kandang_id')   // sisakan 1 record terbaru per kandang
-            ->sum('sisa');
-
+            ->get()->unique('kandang_id')->sum('sisa');
         $totalTelur     = ProduksiTelur::sum('jumlah_produksi');
         $totalPenjualan = PenjualanTelur::sum('total');
+        $produksiTerbaru = ProduksiTelur::with(['kandang'])->latest('tanggal')->limit(10)->get();
 
-        $produksiTerbaru = ProduksiTelur::with(['kandang'])
-            ->latest('tanggal')->limit(10)->get();
-
-        /* ===== 3. GRAFIK PRODUKSI (filter sendiri) ===== */
+        /* ===== 3. GRAFIK PRODUKSI (harian / semua bulan) ===== */
         [$chartLabelsProduksi, $chartDataProduksi] = $this->buildChart(
             $bulanProduksi,
             ProduksiTelur::selectRaw('tanggal, SUM(jumlah_produksi) as total')
         );
 
-        /* ===== 4. GRAFIK PENJUALAN (filter sendiri) ===== */
+        /* ===== 4. GRAFIK PENJUALAN ===== */
         [$chartLabelsPenjualan, $chartDataPenjualan] = $this->buildChart(
             $bulanPenjualan,
             PenjualanTelur::selectRaw('tanggal, SUM(total) as total')
         );
 
-        /* ===== 5. GRAFIK KEMATIAN (filter sendiri, 2 dataset) ===== */
-        [$start, $end] = $this->rentangBulan($bulanKematian);
-
-        $kematianMap = Populasi::selectRaw('tanggal, SUM(mati) as mati, SUM(afkir) as afkir')
-            ->whereBetween('tanggal', [$start->toDateString(), $end->toDateString()])
-            ->groupBy('tanggal')
-            ->get()
-            ->keyBy(fn ($r) => Carbon::parse($r->tanggal)->toDateString());
-
+        /* ===== 5. GRAFIK KEMATIAN ===== */
         $chartLabelsKematian = [];
         $kematianMati  = [];
         $kematianAfkir = [];
-        $hari = $start->copy();
-        while ($hari <= $end) {
-            $key = $hari->toDateString();
-            $chartLabelsKematian[] = $hari->format('d M');
-            $kematianMati[]  = (int) ($kematianMap[$key]->mati ?? 0);
-            $kematianAfkir[] = (int) ($kematianMap[$key]->afkir ?? 0);
-            $hari->addDay();
+
+        if ($bulanKematian === 'all') {
+            $grouped = Populasi::selectRaw('tanggal, SUM(mati) as mati, SUM(afkir) as afkir')
+                ->groupBy('tanggal')->get()
+                ->groupBy(fn ($r) => Carbon::parse($r->tanggal)->format('Y-m'))
+                ->sortKeys();
+            foreach ($grouped as $ym => $items) {
+                $chartLabelsKematian[] = $this->labelBulan($ym);
+                $kematianMati[]  = (int) $items->sum('mati');
+                $kematianAfkir[] = (int) $items->sum('afkir');
+            }
+        } else {
+            [$start, $end] = $this->rentangBulan($bulanKematian);
+            $kematianMap = Populasi::selectRaw('tanggal, SUM(mati) as mati, SUM(afkir) as afkir')
+                ->whereBetween('tanggal', [$start->toDateString(), $end->toDateString()])
+                ->groupBy('tanggal')->get()
+                ->keyBy(fn ($r) => Carbon::parse($r->tanggal)->toDateString());
+            $hari = $start->copy();
+            while ($hari <= $end) {
+                $key = $hari->toDateString();
+                $chartLabelsKematian[] = $hari->format('d M');
+                $kematianMati[]  = (int) ($kematianMap[$key]->mati ?? 0);
+                $kematianAfkir[] = (int) ($kematianMap[$key]->afkir ?? 0);
+                $hari->addDay();
+            }
         }
 
-        /* ===== 6. RINGKASAN PENJUALAN (ikut bulan penjualan terpilih) ===== */
+        /* ===== 6. RINGKASAN PENJUALAN ===== */
         $avgSales = count($chartDataPenjualan) ? round(collect($chartDataPenjualan)->avg()) : 0;
         $sumSales = collect($chartDataPenjualan)->sum();
-
         $namaBulan = self::NAMA_BULAN;
 
         return view('dashboard', compact(
@@ -524,44 +527,52 @@ class DashboardController extends Controller
         return $tanggalCollection
             ->filter()
             ->map(fn ($t) => Carbon::parse($t)->format('Y-m'))
-            ->unique()
-            ->sortDesc()
-            ->values();
+            ->unique()->sortDesc()->values();
     }
 
+    /** ✅ Mendukung nilai 'all' */
     private function pilihBulan(?string $input, $daftar): string
     {
+        if ($input === 'all') return 'all';
         return ($input && $daftar->contains($input))
             ? $input
             : ($daftar->first() ?? Carbon::now()->format('Y-m'));
     }
 
-    /** ✅ Label bulan aman — tidak pakai createFromFormat('Y-m') */
     private function labelBulan(string $bulan): string
     {
+        if ($bulan === 'all') return 'Semua Bulan';
         [$tahun, $bln] = explode('-', $bulan);
         return self::NAMA_BULAN[(int) $bln] . ' ' . $tahun;
     }
 
-    /** ✅ Hari dipaksa '-01' supaya tidak luber ke bulan berikutnya */
     private function rentangBulan(string $bulan): array
     {
         $start = Carbon::createFromFormat('Y-m-d', $bulan . '-01')->startOfDay();
         return [$start, $start->copy()->endOfMonth()];
     }
 
-    /** Bangun [labels, data] harian untuk 1 bulan dari query SUM per tanggal */
+    /** ✅ 'all' → agregasi per bulan; selain itu harian */
     private function buildChart(string $bulan, $query): array
     {
-        [$start, $end] = $this->rentangBulan($bulan);
+        if ($bulan === 'all') {
+            $grouped = $query->groupBy('tanggal')->get()
+                ->groupBy(fn ($r) => Carbon::parse($r->tanggal)->format('Y-m'))
+                ->sortKeys();
+            $labels = [];
+            $data   = [];
+            foreach ($grouped as $ym => $items) {
+                $labels[] = $this->labelBulan($ym);
+                $data[]   = (int) $items->sum('total');
+            }
+            return [$labels, $data];
+        }
 
+        [$start, $end] = $this->rentangBulan($bulan);
         $map = $query
             ->whereBetween('tanggal', [$start->toDateString(), $end->toDateString()])
-            ->groupBy('tanggal')
-            ->get()
-            ->mapWithKeys(fn ($r) => [
-                Carbon::parse($r->tanggal)->toDateString() => (int) $r->total,
-            ]);
+            ->groupBy('tanggal')->get()
+            ->mapWithKeys(fn ($r) => [Carbon::parse($r->tanggal)->toDateString() => (int) $r->total]);
 
         $labels = [];
         $data   = [];
@@ -572,7 +583,6 @@ class DashboardController extends Controller
             $data[]   = (int) ($map[$key] ?? 0);
             $hari->addDay();
         }
-
         return [$labels, $data];
     }
 }
@@ -2236,7 +2246,7 @@ class GudangTelur extends Model
 {
     const BUTIR_PER_PIRING = 30;
     const PIRING_PER_IKAT  = 5;
-    const BUTIR_PER_IKAT   = self::BUTIR_PER_PIRING * self::PIRING_PER_IKAT; // 150 butir
+    const BUTIR_PER_IKAT   = self::BUTIR_PER_PIRING * self::PIRING_PER_IKAT;
 
     protected $table = 'gudang_telur';
     protected $fillable = ['nama', 'lokasi'];
@@ -3626,6 +3636,13 @@ return new class extends Migration
 @section('title', 'Dashboard')
 
 @section('content')
+<style>
+/* ✅ Biar setelah ganti filter, halaman berhenti pas di grafiknya (tidak ketutup topbar) */
+#chart-produksi, #chart-penjualan, #chart-kematian {
+    scroll-margin-top: 95px;
+}
+</style>
+
 <div class="mb-4">
     <h3 class="fw-bold mb-1">Dashboard Peternakan</h3>
     <p class="text-muted mb-0">Pantau kondisi peternakan — tiap grafik punya filter bulannya sendiri.</p>
@@ -3684,7 +3701,7 @@ return new class extends Migration
 </div>
 
 <!-- ===== GRAFIK PRODUKSI + AKSES CEPAT ===== -->
-<div class="row g-4 mb-4">
+<div class="row g-4 mb-4" id="chart-produksi">
     <div class="col-xl-8">
         <div class="panel">
             <div class="panel-header">
@@ -3693,11 +3710,12 @@ return new class extends Migration
                     <div class="text-muted small">Harian — {{ $labelBulanProduksi }}</div>
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                    {{-- FILTER BULAN: PRODUKSI --}}
-                    <form method="GET" class="m-0">
+                    {{-- ✅ FILTER BULAN: PRODUKSI (action pakai anchor biar tetap di sini) --}}
+                    <form method="GET" class="m-0" action="#chart-produksi">
                         <input type="hidden" name="bulan_penjualan" value="{{ $bulanPenjualan }}">
                         <input type="hidden" name="bulan_kematian" value="{{ $bulanKematian }}">
                         <select name="bulan_produksi" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+                            <option value="all" @selected($bulanProduksi === 'all')>Semua Bulan</option>
                             @foreach ($daftarBulanProduksi as $b)
                                 <option value="{{ $b }}" @selected($b === $bulanProduksi)>
                                     {{ $namaBulan[(int) substr($b, 5, 2)] }} {{ substr($b, 0, 4) }}
@@ -3743,7 +3761,7 @@ return new class extends Migration
 </div>
 
 <!-- ===== GRAFIK PENJUALAN ===== -->
-<div class="row g-4 mb-4">
+<div class="row g-4 mb-4" id="chart-penjualan">
     <div class="col-xl-8">
         <div class="panel">
             <div class="panel-header">
@@ -3752,11 +3770,12 @@ return new class extends Migration
                     <div class="text-muted small">Harian — {{ $labelBulanPenjualan }} (Rp)</div>
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                    {{-- FILTER BULAN: PENJUALAN --}}
-                    <form method="GET" class="m-0">
+                    {{-- ✅ FILTER BULAN: PENJUALAN --}}
+                    <form method="GET" class="m-0" action="#chart-penjualan">
                         <input type="hidden" name="bulan_produksi" value="{{ $bulanProduksi }}">
                         <input type="hidden" name="bulan_kematian" value="{{ $bulanKematian }}">
                         <select name="bulan_penjualan" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+                            <option value="all" @selected($bulanPenjualan === 'all')>Semua Bulan</option>
                             @foreach ($daftarBulanPenjualan as $b)
                                 <option value="{{ $b }}" @selected($b === $bulanPenjualan)>
                                     {{ $namaBulan[(int) substr($b, 5, 2)] }} {{ substr($b, 0, 4) }}
@@ -3774,7 +3793,7 @@ return new class extends Migration
         <div class="stat-card h-100 d-flex flex-column justify-content-center">
             <div class="stat-top">
                 <div>
-                    <div class="stat-label mt-0">Rata-rata / hari</div>
+                    <div class="stat-label mt-0">Rata-rata / {{ $bulanPenjualan === 'all' ? 'bulan' : 'hari' }}</div>
                     <div class="stat-value">Rp {{ number_format($avgSales, 0, ',', '.') }}</div>
                 </div>
                 <div class="stat-icon icon-green"><i class="bi bi-graph-up-arrow"></i></div>
@@ -3787,7 +3806,7 @@ return new class extends Migration
 </div>
 
 <!-- ===== GRAFIK KEMATIAN ===== -->
-<div class="row g-4 mb-4">
+<div class="row g-4 mb-4" id="chart-kematian">
     <div class="col-12">
         <div class="panel">
             <div class="panel-header">
@@ -3797,11 +3816,12 @@ return new class extends Migration
                         Mati & afkir harian — sumber: Data Populasi (input admin) — {{ $labelBulanKematian }}
                     </div>
                 </div>
-                {{-- FILTER BULAN: KEMATIAN --}}
-                <form method="GET" class="m-0">
+                {{-- ✅ FILTER BULAN: KEMATIAN --}}
+                <form method="GET" class="m-0" action="#chart-kematian">
                     <input type="hidden" name="bulan_produksi" value="{{ $bulanProduksi }}">
                     <input type="hidden" name="bulan_penjualan" value="{{ $bulanPenjualan }}">
                     <select name="bulan_kematian" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+                        <option value="all" @selected($bulanKematian === 'all')>Semua Bulan</option>
                         @foreach ($daftarBulanKematian as $b)
                             <option value="{{ $b }}" @selected($b === $bulanKematian)>
                                 {{ $namaBulan[(int) substr($b, 5, 2)] }} {{ substr($b, 0, 4) }}
@@ -3943,6 +3963,17 @@ new Chart(document.getElementById('mortalityChart'), {
         scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
     }
 });
+
+(function () {
+    if (window.location.hash) {
+        var el = document.querySelector(window.location.hash);
+        if (el) {
+            setTimeout(function () {
+                el.scrollIntoView({ behavior: 'auto', block: 'start' });
+            }, 60); 
+        }
+    }
+})();
 </script>
 @endpush
 
@@ -3959,139 +3990,129 @@ new Chart(document.getElementById('mortalityChart'), {
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 :root{
-  --coklat-900:#2d1b16; --coklat-800:#3e2723; --coklat-700:#4e342e;
-  --coklat-600:#5d4037; --coklat-500:#6d4c41; --coklat-400:#8d6e63;
-  --krem:#f7f2ea; --krem-2:#efe6d9; --aksen:#d7a86e;
-  --teks-terang:#ffe9c9;
+--coklat-900:#2d1b16; --coklat-800:#3e2723; --coklat-700:#4e342e;
+--coklat-600:#5d4037; --coklat-500:#6d4c41; --coklat-400:#8d6e63;
+--krem:#f7f2ea; --krem-2:#efe6d9; --aksen:#d7a86e;
+--teks-terang:#ffe9c9;
 }
 html{scroll-behavior:smooth}
 body{font-family:'Inter',sans-serif;background:var(--krem);color:#33261f;margin:0}
 
 /* ================= NAVBAR ================= */
 .nav-landing{
-  position:fixed; top:0; left:0; right:0; z-index:1030;
-  background:transparent;
-  border-bottom:1px solid transparent;
-  transition: background .35s ease, border-color .35s ease, backdrop-filter .35s ease, padding .35s ease;
-  padding: 18px 0;
+position:fixed; top:0; left:0; right:0; z-index:1030;
+background:transparent;
+border-bottom:1px solid transparent;
+transition: background .35s ease, border-color .35s ease, backdrop-filter .35s ease, padding .35s ease;
+padding: 18px 0;
 }
 .nav-landing .container{padding:0 24px}
-
 .nav-landing .navbar-brand{
-  display:flex; align-items:center; gap:10px;
-  text-decoration:none;
+display:flex; align-items:center; gap:10px;
+text-decoration:none;
 }
 .nav-logo{
-  height: 46px;
-  width: auto;
-  object-fit: contain;
-  display: block;
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  border-radius: 0;
-  padding: 0;
+height: 46px;
+width: auto;
+object-fit: contain;
+display: block;
+background: transparent;
+border: none;
+box-shadow: none;
+border-radius: 0;
+padding: 0;
 }
 .nav-landing.scrolled .nav-logo{ height: 38px; }
-
 .brand-divider{
-  width: 1px;
-  height: 32px;
-  background: currentColor;
-  opacity: .25;
-  margin: 0 12px;
+width: 1px;
+height: 32px;
+background: currentColor;
+opacity: .25;
+margin: 0 12px;
 }
-
 .brand-egg{
-  width:40px;height:40px;border-radius:10px;
-  background:linear-gradient(135deg,var(--coklat-500),var(--coklat-400));
-  display:none;
-  align-items:center;justify-content:center;
-  color:#ffe9c9;font-size:20px;
-  box-shadow: 0 4px 12px rgba(0,0,0,.25);
+width:40px;height:40px;border-radius:10px;
+background:linear-gradient(135deg,var(--coklat-500),var(--coklat-400));
+display:none;
+align-items:center;justify-content:center;
+color:#ffe9c9;font-size:20px;
+box-shadow: 0 4px 12px rgba(0,0,0,.25);
 }
 .brand-egg i{display:inline-block;animation:wobble 2.6s ease-in-out infinite}
-
 .brand-text{
-  font-weight: 800;
-  font-size: 20px;
-  letter-spacing: 0.3px;
+font-weight: 800;
+font-size: 20px;
+letter-spacing: 0.3px;
 }
-
 .nav-landing .brand-text,
 .nav-landing .navbar-brand{
-  color: var(--teks-terang);
-  text-shadow: 0 2px 10px rgba(0,0,0,.45);
+color: var(--teks-terang);
+text-shadow: 0 2px 10px rgba(0,0,0,.45);
 }
 .nav-landing .nav-links a{
-  color: var(--teks-terang);
-  text-decoration:none;
-  font-size:14px;
-  font-weight:600;
-  margin-left:22px;
-  text-shadow: 0 1px 6px rgba(0,0,0,.4);
-  transition: color .2s, transform .2s;
-  display:inline-block;
+color: var(--teks-terang);
+text-decoration:none;
+font-size:14px;
+font-weight:600;
+margin-left:22px;
+text-shadow: 0 1px 6px rgba(0,0,0,.4);
+transition: color .2s, transform .2s;
+display:inline-block;
 }
 .nav-landing .nav-links a:hover{
-  color: #fff;
-  transform: translateY(-1px);
+color: #fff;
+transform: translateY(-1px);
 }
-
 .nav-landing.scrolled{
-  background: rgba(45, 27, 22, 0.85);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  padding: 10px 0;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+background: rgba(45, 27, 22, 0.85);
+backdrop-filter: blur(14px) saturate(140%);
+-webkit-backdrop-filter: blur(14px) saturate(140%);
+border-bottom: 1px solid rgba(255,255,255,0.08);
+padding: 10px 0;
+box-shadow: 0 8px 24px rgba(0,0,0,0.18);
 }
 .nav-landing.scrolled .brand-text{
-  color: #fff;
-  text-shadow: none;
-  transform: scale(.97);
-  transform-origin: left center;
-  transition: transform .3s ease;
+color: #fff;
+text-shadow: none;
+transform: scale(.97);
+transform-origin: left center;
+transition: transform .3s ease;
 }
 .nav-landing.scrolled .nav-links a{
-  color: rgba(255,255,255,.9);
-  text-shadow: none;
+color: rgba(255,255,255,.9);
+text-shadow: none;
 }
 .nav-landing.scrolled .nav-links a:hover{ color:#fff; }
-
 .nav-spacer{height:80px}
-
 .btn-cta{background:var(--aksen);color:var(--coklat-900);font-weight:700;border:none;padding:8px 18px}
 .btn-cta:hover{background:#c6935a;color:var(--coklat-900)}
 .btn-ghost{border:1px solid rgba(255,255,255,.55);color:var(--teks-terang);padding:8px 18px;font-weight:600}
 .btn-ghost:hover{background:rgba(255,255,255,.15);color:#fff}
 
+/* ================= HERO ================= */
 .hero{
-  background:linear-gradient(135deg,var(--coklat-900) 0%,var(--coklat-700) 60%,var(--coklat-500) 100%);
-  color:#fff;overflow:hidden;position:relative;
-  padding: 100px 0 80px;
+background:linear-gradient(135deg,var(--coklat-900) 0%,var(--coklat-700) 60%,var(--coklat-500) 100%);
+color:#fff;overflow:hidden;position:relative;
+padding: 100px 0 150px;
 }
 .hero::before{
-  content:"";position:absolute;inset:0;
-  background: radial-gradient(circle at 20% 30%, rgba(215,168,110,.15), transparent 40%),
-              radial-gradient(circle at 80% 70%, rgba(215,168,110,.10), transparent 40%);
-  pointer-events:none;
+content:"";position:absolute;inset:0;
+background: radial-gradient(circle at 20% 30%, rgba(215,168,110,.15), transparent 40%),
+radial-gradient(circle at 80% 70%, rgba(215,168,110,.10), transparent 40%);
+pointer-events:none;
 }
 .hero-badge{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#ffe9c9}
-
 .stage{position:relative;min-height:440px}
 .egg{position:absolute;background:linear-gradient(180deg,#fff8ee,#e8d5bd);border-radius:50% 50% 50% 50%/60% 60% 40% 40%;box-shadow:0 16px 28px rgba(0,0,0,.28)}
 .egg.s1{width:64px;height:80px;left:6%;top:30px;animation:float 3.2s .3s ease-in-out infinite}
 .egg.s2{width:46px;height:58px;right:8%;top:20px;animation:float 3.6s .8s ease-in-out infinite}
 .egg.s3{width:54px;height:68px;right:18%;bottom:60px;animation:float 3s 1.2s ease-in-out infinite}
-
 .chicken-wrap{
-  position:absolute;left:50%;top:50%;
-  transform:translate(-50%,-50%);
-  width: 320px; height: 320px;
+position:absolute;left:50%;top:50%;
+transform:translate(-50%,-50%);
+width: 320px; height: 320px;
 }
 .chicken-wrap svg{width:100%;height:100%;overflow:visible}
-
 .ch-body{transform-origin:50% 100%;animation:bodyBounce 1.4s ease-in-out infinite}
 .ch-head{transform-origin:50% 100%;animation:headNod 2s ease-in-out infinite}
 .ch-wing-left{transform-origin:90% 30%;animation:flapL 0.9s ease-in-out infinite}
@@ -4116,6 +4137,31 @@ body{font-family:'Inter',sans-serif;background:var(--krem);color:#33261f;margin:
 @keyframes float{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-16px) rotate(2deg)}}
 @keyframes wobble{0%,100%{transform:rotate(0)}25%{transform:rotate(-10deg)}75%{transform:rotate(10deg)}}
 
+/* ================= ✅ PEMBATAS GELOMBANG HIDUP ================= */
+.wave-divider{
+position: relative;
+height: 120px;
+margin-top: -120px;          /* menimpa bagian bawah hero */
+overflow: hidden;
+pointer-events: none;
+z-index: 5;
+}
+.wave-layer{ position:absolute; inset:0; }
+.wave-layer svg{
+position:absolute; bottom:0; left:0;
+width:200%; height:100%;
+display:block;
+}
+/* 3 layer: beda kecepatan & arah biar terlihat "hidup" */
+.wl-back  { animation: waveBob 7s ease-in-out infinite; }
+.wl-back svg  { fill: var(--krem); opacity:.30; animation: waveMove 26s linear infinite; }
+.wl-mid   { animation: waveBob 5.5s ease-in-out infinite .6s; }
+.wl-mid svg   { fill: var(--krem); opacity:.55; animation: waveMove 17s linear infinite reverse; }
+.wl-front { animation: waveBob 4.5s ease-in-out infinite .3s; }
+.wl-front svg { fill: var(--krem); opacity:1;  animation: waveMove 11s linear infinite; }
+@keyframes waveMove{ from{ transform: translateX(0); } to{ transform: translateX(-50%); } }
+@keyframes waveBob{ 0%,100%{ transform: translateY(0); } 50%{ transform: translateY(7px); } }
+
 .section-title{font-weight:800}
 .feature-card{background:#fff;border:1px solid #e6dacc;border-radius:16px;padding:24px;height:100%;transition:.2s}
 .feature-card:hover{transform:translateY(-4px);box-shadow:0 12px 26px rgba(93,64,55,.14)}
@@ -4123,12 +4169,12 @@ body{font-family:'Inter',sans-serif;background:var(--krem);color:#33261f;margin:
 .about{background:var(--krem-2)}
 .check-item i{color:var(--coklat-500)}
 footer{background:var(--coklat-900);color:#cbb5a8}
-
 @media (max-width:991px){
-  .chicken-wrap{width:240px;height:240px}
-  .stage{min-height:340px}
-  .nav-landing .nav-links{display:none}
-  .brand-text{font-size:17px}
+.chicken-wrap{width:240px;height:240px}
+.stage{min-height:340px}
+.nav-landing .nav-links{display:none}
+.brand-text{font-size:17px}
+.wave-divider{height:80px;margin-top:-80px}
 }
 </style>
 </head>
@@ -4136,242 +4182,203 @@ footer{background:var(--coklat-900);color:#cbb5a8}
 
 <!-- NAVBAR -->
 <nav class="nav-landing" id="navLanding">
-  <div class="container d-flex align-items-center justify-content-between">
-    <a href="{{ url('/') }}" class="navbar-brand">
-      <img src="{{ asset('logo.png') }}" alt="Logo Perusahaan" class="nav-logo"
-           onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-flex';">
-      <span class="brand-egg"><i class="bi bi-egg-fried"></i></span>
-      <span class="brand-divider"></span>
-      <span class="brand-text">BukanAyam</span>
-    </a>
-
-    <div class="nav-links d-none d-md-block">
-      <a href="#fitur">Fitur</a>
-      <a href="#tentang">Tentang</a>
-    </div>
-
-    <div>
-      @auth
-        <a href="{{ auth()->user()->role === 'admin' ? route('dashboard') : route('manpower.laporan.create') }}" class="btn btn-cta btn-sm">
-          Buka Dashboard <i class="bi bi-arrow-right ms-1"></i>
-        </a>
-      @else
-        <a href="{{ route('login') }}" class="btn btn-cta btn-sm">
-          Masuk <i class="bi bi-box-arrow-in-right ms-1"></i>
-        </a>
-      @endauth
-    </div>
-  </div>
+<div class="container d-flex align-items-center justify-content-between">
+<a href="{{ url('/') }}" class="navbar-brand">
+<img src="{{ asset('logo.png') }}" alt="Logo Perusahaan" class="nav-logo"
+onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-flex';">
+<span class="brand-egg"><i class="bi bi-egg-fried"></i></span>
+<span class="brand-divider"></span>
+<span class="brand-text">BukanAyam</span>
+</a>
+<div class="nav-links d-none d-md-block">
+<a href="#tentang">Tentang</a>
+</div>
+<div>
+@auth
+<a href="{{ auth()->user()->role === 'admin' ? route('dashboard') : route('manpower.laporan.create') }}" class="btn btn-cta btn-sm">
+Buka Dashboard <i class="bi bi-arrow-right ms-1"></i>
+</a>
+@else
+<a href="{{ route('login') }}" class="btn btn-cta btn-sm">
+Masuk <i class="bi bi-box-arrow-in-right ms-1"></i>
+</a>
+@endauth
+</div>
+</div>
 </nav>
 <div class="nav-spacer"></div>
 
 <!-- HERO -->
 <header class="hero">
-  <div class="container">
-    <div class="row align-items-center g-4">
-      <div class="col-lg-6">
-        <span class="badge hero-badge rounded-pill px-3 py-2 mb-3">
-          <i class="bi bi-geo-alt-fill me-1"></i> Desa Tanjung Agung
-        </span>
-        <h1 class="display-5 fw-bold lh-sm mb-3">
-          Kelola Peternakan Ayam Jadi <span style="color:var(--aksen)">Lebih Mudah</span>
-        </h1>
-        <p class="lead mb-4" style="color:#e8d9c8">
-         Aplikasi BukanAyam dikembangkan dengan dukungan PT Pesona Khatulistiwa Nusantara (PKN), perusahaan yang berkomitmen pada digitalisasi dan pemberdayaan masyarakat desa. Kehadiran PKN membantu peternak ayam di Desa Tanjung Agung beralih dari pencatatan manual ke sistem terintegrasi — populasi, produksi telur, penjualan, hingga pakan tercatat akurat dan dapat dipantau kapan saja.
-        </p>
-      </div>
-
-      <div class="col-lg-6 d-none d-lg-block">
-        <div class="stage">
-          <div class="egg s1"></div>
-          <div class="egg s2"></div>
-          <div class="egg s3"></div>
-
-          <div class="chicken-wrap">
-            <svg viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg">
-              <g class="grass">
-                <path d="M40 290 Q60 270 80 290 Q100 270 120 290 Q140 270 160 290 Q180 270 200 290 Q220 270 240 290 Q260 270 280 290" stroke="#5d8a4a" stroke-width="4" fill="none" stroke-linecap="round"/>
-                <path d="M50 295 L50 280 M90 295 L90 278 M130 295 L130 282 M170 295 L170 278 M210 295 L210 280 M250 295 L250 278" stroke="#6fa05a" stroke-width="2" stroke-linecap="round"/>
-              </g>
-              <ellipse cx="160" cy="285" rx="70" ry="8" fill="rgba(0,0,0,.25)"/>
-              <g class="ch-body">
-                <g class="ch-tail">
-                  <path d="M230 200 Q275 160 270 110 Q255 140 240 155 Q255 120 245 95 Q230 130 220 150 Q225 115 215 100 Q205 140 210 175 Z" fill="#5d4037"/>
-                  <path d="M232 195 Q265 160 260 120" stroke="#3e2723" stroke-width="2" fill="none"/>
-                </g>
-                <g>
-                  <line x1="140" y1="250" x2="135" y2="285" stroke="#f4b400" stroke-width="5" stroke-linecap="round"/>
-                  <line x1="180" y1="250" x2="185" y2="285" stroke="#f4b400" stroke-width="5" stroke-linecap="round"/>
-                  <path d="M125 285 L135 285 L145 285 M135 285 L135 295" stroke="#f4b400" stroke-width="4" stroke-linecap="round" fill="none"/>
-                  <path d="M175 285 L185 285 L195 285 M185 285 L185 295" stroke="#f4b400" stroke-width="4" stroke-linecap="round" fill="none"/>
-                </g>
-                <ellipse cx="160" cy="210" rx="75" ry="55" fill="#c9a27a"/>
-                <ellipse cx="160" cy="215" rx="70" ry="50" fill="#d7b58f"/>
-                <ellipse cx="150" cy="230" rx="40" ry="25" fill="#e8cfa8" opacity=".7"/>
-                <g class="ch-wing-left">
-                  <path d="M210 180 Q250 190 245 230 Q230 215 215 220 Q225 205 210 195 Z" fill="#a0764f"/>
-                  <path d="M215 190 Q235 200 232 220" stroke="#7d5a3a" stroke-width="1.5" fill="none"/>
-                </g>
-                <g class="ch-wing-right">
-                  <path d="M110 180 Q70 190 75 230 Q90 215 105 220 Q95 205 110 195 Z" fill="#a0764f"/>
-                  <path d="M105 190 Q85 200 88 220" stroke="#7d5a3a" stroke-width="1.5" fill="none"/>
-                </g>
-                <g class="ch-head">
-                  <path d="M145 175 Q160 165 175 175 L175 200 L145 200 Z" fill="#d7b58f"/>
-                  <g class="ch-comb">
-                    <path d="M140 105 Q145 85 150 100 Q155 80 160 100 Q165 82 170 100 Q175 85 180 108 Q165 115 140 110 Z" fill="#d93636"/>
-                    <path d="M142 108 Q150 95 160 105 Q170 95 178 108" stroke="#a02020" stroke-width="1" fill="none"/>
-                  </g>
-                  <circle cx="160" cy="130" r="38" fill="#d7b58f"/>
-                  <circle cx="160" cy="132" r="34" fill="#e8cfa8"/>
-                  <circle cx="140" cy="138" r="6" fill="#f4b8b8" opacity=".7"/>
-                  <g>
-                    <circle cx="148" cy="125" r="6" fill="#fff"/>
-                    <circle cx="148" cy="125" r="4" fill="#2d1b16"/>
-                    <circle cx="149" cy="124" r="1.5" fill="#fff"/>
-                    <ellipse class="ch-eye" cx="148" cy="125" rx="6" ry="6" fill="#d7b58f" transform="scaleY(0)"/>
-                  </g>
-                  <g>
-                    <circle cx="172" cy="125" r="6" fill="#fff"/>
-                    <circle cx="172" cy="125" r="4" fill="#2d1b16"/>
-                    <circle cx="173" cy="124" r="1.5" fill="#fff"/>
-                    <ellipse class="ch-eye" cx="172" cy="125" rx="6" ry="6" fill="#d7b58f" transform="scaleY(0)"/>
-                  </g>
-                  <g class="ch-beak">
-                    <path d="M155 140 L165 140 L160 158 Z" fill="#f4b400"/>
-                    <path d="M155 140 L165 140" stroke="#c79000" stroke-width="1"/>
-                    <path d="M157 148 L163 148" stroke="#c79000" stroke-width=".5"/>
-                  </g>
-                  <path d="M155 155 Q160 172 165 155 Q163 165 160 165 Q157 165 155 155 Z" fill="#d93636"/>
-                </g>
-                <g class="ch-egg-drop">
-                  <ellipse cx="160" cy="260" rx="10" ry="13" fill="#fff8ee" stroke="#e8d5bd" stroke-width="1"/>
-                  <ellipse cx="158" cy="257" rx="3" ry="4" fill="#fff" opacity=".7"/>
-                </g>
-              </g>
-            </svg>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+<div class="container">
+<div class="row align-items-center g-4">
+<div class="col-lg-6">
+<span class="badge hero-badge rounded-pill px-3 py-2 mb-3">
+<i class="bi bi-geo-alt-fill me-1"></i> Desa Tanjung Agung
+</span>
+<h1 class="display-5 fw-bold lh-sm mb-3">
+Kelola Peternakan Ayam Jadi <span style="color:var(--aksen)">Lebih Mudah</span>
+</h1>
+<p class="lead mb-4" style="color:#e8d9c8">
+Aplikasi BukanAyam dikembangkan dengan dukungan PT Pesona Khatulistiwa Nusantara (PKN), perusahaan yang berkomitmen pada digitalisasi dan pemberdayaan masyarakat desa. Kehadiran PKN membantu peternak ayam di Desa Tanjung Agung beralih dari pencatatan manual ke sistem terintegrasi — populasi, produksi telur, penjualan, hingga pakan tercatat akurat dan dapat dipantau kapan saja.
+</p>
+</div>
+<div class="col-lg-6 d-none d-lg-block">
+<div class="stage">
+<div class="egg s1"></div>
+<div class="egg s2"></div>
+<div class="egg s3"></div>
+<div class="chicken-wrap">
+<svg viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg">
+<g class="grass">
+<path d="M40 290 Q60 270 80 290 Q100 270 120 290 Q140 270 160 290 Q180 270 200 290 Q220 270 240 290 Q260 270 280 290" stroke="#5d8a4a" stroke-width="4" fill="none" stroke-linecap="round"/>
+<path d="M50 295 L50 280 M90 295 L90 278 M130 295 L130 282 M170 295 L170 278 M210 295 L210 280 M250 295 L250 278" stroke="#6fa05a" stroke-width="2" stroke-linecap="round"/>
+</g>
+<ellipse cx="160" cy="285" rx="70" ry="8" fill="rgba(0,0,0,.25)"/>
+<g class="ch-body">
+<g class="ch-tail">
+<path d="M230 200 Q275 160 270 110 Q255 140 240 155 Q255 120 245 95 Q230 130 220 150 Q225 115 215 100 Q205 140 210 175 Z" fill="#5d4037"/>
+<path d="M232 195 Q265 160 260 120" stroke="#3e2723" stroke-width="2" fill="none"/>
+</g>
+<g>
+<line x1="140" y1="250" x2="135" y2="285" stroke="#f4b400" stroke-width="5" stroke-linecap="round"/>
+<line x1="180" y1="250" x2="185" y2="285" stroke="#f4b400" stroke-width="5" stroke-linecap="round"/>
+<path d="M125 285 L135 285 L145 285 M135 285 L135 295" stroke="#f4b400" stroke-width="4" stroke-linecap="round" fill="none"/>
+<path d="M175 285 L185 285 L195 285 M185 285 L185 295" stroke="#f4b400" stroke-width="4" stroke-linecap="round" fill="none"/>
+</g>
+<ellipse cx="160" cy="210" rx="75" ry="55" fill="#c9a27a"/>
+<ellipse cx="160" cy="215" rx="70" ry="50" fill="#d7b58f"/>
+<ellipse cx="150" cy="230" rx="40" ry="25" fill="#e8cfa8" opacity=".7"/>
+<g class="ch-wing-left">
+<path d="M210 180 Q250 190 245 230 Q230 215 215 220 Q225 205 210 195 Z" fill="#a0764f"/>
+<path d="M215 190 Q235 200 232 220" stroke="#7d5a3a" stroke-width="1.5" fill="none"/>
+</g>
+<g class="ch-wing-right">
+<path d="M110 180 Q70 190 75 230 Q90 215 105 220 Q95 205 110 195 Z" fill="#a0764f"/>
+<path d="M105 190 Q85 200 88 220" stroke="#7d5a3a" stroke-width="1.5" fill="none"/>
+</g>
+<g class="ch-head">
+<path d="M145 175 Q160 165 175 175 L175 200 L145 200 Z" fill="#d7b58f"/>
+<g class="ch-comb">
+<path d="M140 105 Q145 85 150 100 Q155 80 160 100 Q165 82 170 100 Q175 85 180 108 Q165 115 140 110 Z" fill="#d93636"/>
+<path d="M142 108 Q150 95 160 105 Q170 95 178 108" stroke="#a02020" stroke-width="1" fill="none"/>
+</g>
+<circle cx="160" cy="130" r="38" fill="#d7b58f"/>
+<circle cx="160" cy="132" r="34" fill="#e8cfa8"/>
+<circle cx="140" cy="138" r="6" fill="#f4b8b8" opacity=".7"/>
+<g>
+<circle cx="148" cy="125" r="6" fill="#fff"/>
+<circle cx="148" cy="125" r="4" fill="#2d1b16"/>
+<circle cx="149" cy="124" r="1.5" fill="#fff"/>
+<ellipse class="ch-eye" cx="148" cy="125" rx="6" ry="6" fill="#d7b58f" transform="scaleY(0)"/>
+</g>
+<g>
+<circle cx="172" cy="125" r="6" fill="#fff"/>
+<circle cx="172" cy="125" r="4" fill="#2d1b16"/>
+<circle cx="173" cy="124" r="1.5" fill="#fff"/>
+<ellipse class="ch-eye" cx="172" cy="125" rx="6" ry="6" fill="#d7b58f" transform="scaleY(0)"/>
+</g>
+<g class="ch-beak">
+<path d="M155 140 L165 140 L160 158 Z" fill="#f4b400"/>
+<path d="M155 140 L165 140" stroke="#c79000" stroke-width="1"/>
+<path d="M157 148 L163 148" stroke="#c79000" stroke-width=".5"/>
+</g>
+<path d="M155 155 Q160 172 165 155 Q163 165 160 165 Q157 165 155 155 Z" fill="#d93636"/>
+</g>
+<g class="ch-egg-drop">
+<ellipse cx="160" cy="260" rx="10" ry="13" fill="#fff8ee" stroke="#e8d5bd" stroke-width="1"/>
+<ellipse cx="158" cy="257" rx="3" ry="4" fill="#fff" opacity=".7"/>
+</g>
+</g>
+</svg>
+</div>
+</div>
+</div>
+</div>
 </header>
 
-<!-- FITUR -->
-<section id="fitur" class="py-5">
-  <div class="container py-4">
-    <div class="text-center mb-5">
-      <h2 class="section-title">Fitur Utama</h2>
-      <p class="text-muted">Semua yang dibutuhkan peternakan dalam satu aplikasi.</p>
-    </div>
-    <div class="row g-4">
-      <div class="col-md-6 col-lg-4">
-        <div class="feature-card">
-          <div class="feature-icon"><i class="bi bi-people-fill"></i></div>
-          <h5 class="fw-bold">Populasi Ayam</h5>
-          <p class="small text-muted mb-0">Pencatatan ayam hidup, mati, dan afkir dengan sisa populasi yang terhitung otomatis per kandang.</p>
-        </div>
-      </div>
-      <div class="col-md-6 col-lg-4">
-        <div class="feature-card">
-          <div class="feature-icon"><i class="bi bi-egg-fill"></i></div>
-          <h5 class="fw-bold">Produksi Telur</h5>
-          <p class="small text-muted mb-0">Catat produksi telur harian lengkap dengan persentase dan kualitas telur (bagus / reject).</p>
-        </div>
-      </div>
-      <div class="col-md-6 col-lg-4">
-        <div class="feature-card">
-          <div class="feature-icon"><i class="bi bi-cash-stack"></i></div>
-          <h5 class="fw-bold">Penjualan Telur</h5>
-          <p class="small text-muted mb-0">Pencatatan penjualan dengan customer, jumlah, dan total harga yang otomatis terakumulasi.</p>
-        </div>
-      </div>
-      <div class="col-md-6 col-lg-4">
-        <div class="feature-card">
-          <div class="feature-icon"><i class="bi bi-basket-fill"></i></div>
-          <h5 class="fw-bold">Manajemen Pakan</h5>
-          <p class="small text-muted mb-0">Stok gudang pakan, pengambilan per kandang, dan laporan pakan yang dihitung otomatis.</p>
-        </div>
-      </div>
-      <div class="col-md-6 col-lg-4">
-        <div class="feature-card">
-          <div class="feature-icon"><i class="bi bi-clipboard2-data-fill"></i></div>
-          <h5 class="fw-bold">Laporan Harian Man Power</h5>
-          <p class="small text-muted mb-0">Anak kandang mencatat kondisi lapangan lewat form sederhana langsung dari HP.</p>
-        </div>
-      </div>
-      <div class="col-md-6 col-lg-4">
-        <div class="feature-card">
-          <div class="feature-icon"><i class="bi bi-shield-lock-fill"></i></div>
-          <h5 class="fw-bold">Multi-Role Admin & Man Power</h5>
-          <p class="small text-muted mb-0">Hak akses terpisah antara admin dan anak kandang, sehingga data tetap aman dan terjaga.</p>
-        </div>
-      </div>
-    </div>
-  </div>
+{{-- ===== ✅ PEMBATAS GELOMBANG HIDUP (hero → konten) ===== --}}
+<div class="wave-divider" aria-hidden="true">
+<div class="wave-layer wl-back">
+<svg viewBox="0 0 2880 140" preserveAspectRatio="none">
+<path d="M0,60 C240,100 480,100 720,60 C960,20 1200,20 1440,60 C1680,100 1920,100 2160,60 C2400,20 2640,20 2880,60 L2880,140 L0,140 Z"/>
+</svg>
+</div>
+<div class="wave-layer wl-mid">
+<svg viewBox="0 0 2880 140" preserveAspectRatio="none">
+<path d="M0,70 C240,30 480,30 720,70 C960,110 1200,110 1440,70 C1680,30 1920,30 2160,70 C2400,110 2640,110 2880,70 L2880,140 L0,140 Z"/>
+</svg>
+</div>
+<div class="wave-layer wl-front">
+<svg viewBox="0 0 2880 140" preserveAspectRatio="none">
+<path d="M0,80 C240,120 480,120 720,80 C960,40 1200,40 1440,80 C1680,120 1920,120 2160,80 C2400,40 2640,40 2880,80 L2880,140 L0,140 Z"/>
+</svg>
+</div>
+</div>
+
+</div>
+</div>
+</div>
 </section>
 
 <!-- TENTANG -->
 <section id="tentang" class="about py-5">
-  <div class="container py-4">
-    <div class="row align-items-center g-4">
-      <div class="col-lg-6">
-        <h2 class="section-title mb-3">Tentang Aplikasi</h2>
-        <p class="mb-3">
-          BukanAyam dibangun untuk membantu peternakan ayam di
-          <strong>Desa Tanjung Agung</strong> mencatat dan mengelola data peternakan
-          secara digital. Data yang sebelumnya tersebar di buku catatan — populasi
-          ayam, produksi telur, penjualan, sampai pemakaian pakan — kini terkumpul
-          dalam satu sistem yang bisa diakses kapan saja.
-        </p>
-        <ul class="list-unstyled mb-0">
-          <li class="check-item mb-2"><i class="bi bi-check-circle-fill me-2"></i>Pencatatan lapangan langsung oleh man power</li>
-          <li class="check-item mb-2"><i class="bi bi-check-circle-fill me-2"></i>Perhitungan populasi & sisa pakan otomatis</li>
-          <li class="check-item mb-2"><i class="bi bi-check-circle-fill me-2"></i>Laporan produksi dan pakan yang terintegrasi</li>
-          <li class="check-item mb-2"><i class="bi bi-check-circle-fill me-2"></i>Dashboard terpisah untuk admin dan man power</li>
-        </ul>
-      </div>
-      <div class="col-lg-6">
-        <div class="feature-card text-center p-5">
-          <div class="feature-icon mx-auto" style="width:70px;height:70px;font-size:32px">
-            <i class="bi bi-egg-fried"></i>
-          </div>
-          <h4 class="fw-bold mt-3">BukanAyam</h4>
-          <p class="text-muted small mb-4">Sistem Manajemen Peternakan Ayam</p>
-          <div class="d-flex justify-content-center gap-2 flex-wrap">
-            <span class="badge rounded-pill" style="background:var(--krem-2);color:var(--coklat-600)">
-              <i class="bi bi-geo-alt me-1"></i>Desa Tanjung Agung
-            </span>
-            <span class="badge rounded-pill" style="background:var(--krem-2);color:var(--coklat-600)">
-              <i class="bi bi-calendar3 me-1"></i>{{ date('Y') }}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+<div class="container py-4">
+<div class="row align-items-center g-4">
+<div class="col-lg-6">
+<h2 class="section-title mb-3">Tentang Aplikasi</h2>
+<p class="mb-3">
+BukanAyam dibangun untuk membantu peternakan ayam di
+<strong>Desa Tanjung Agung</strong> mencatat dan mengelola data peternakan
+secara digital. Data yang sebelumnya tersebar di buku catatan — populasi
+ayam, produksi telur, penjualan, sampai pemakaian pakan — kini terkumpul
+dalam satu sistem yang bisa diakses kapan saja.
+</p>
+<ul class="list-unstyled mb-0">
+<li class="check-item mb-2"><i class="bi bi-check-circle-fill me-2"></i>Pencatatan lapangan langsung oleh man power</li>
+<li class="check-item mb-2"><i class="bi bi-check-circle-fill me-2"></i>Perhitungan populasi & sisa pakan otomatis</li>
+<li class="check-item mb-2"><i class="bi bi-check-circle-fill me-2"></i>Laporan produksi dan pakan yang terintegrasi</li>
+<li class="check-item mb-2"><i class="bi bi-check-circle-fill me-2"></i>Dashboard terpisah untuk admin dan man power</li>
+</ul>
+</div>
+<div class="col-lg-6">
+<div class="feature-card text-center p-5">
+<div class="feature-icon mx-auto" style="width:70px;height:70px;font-size:32px">
+<i class="bi bi-egg-fried"></i>
+</div>
+<h4 class="fw-bold mt-3">BukanAyam</h4>
+<p class="text-muted small mb-4">Sistem Manajemen Peternakan Ayam</p>
+<div class="d-flex justify-content-center gap-2 flex-wrap">
+<span class="badge rounded-pill" style="background:var(--krem-2);color:var(--coklat-600)">
+<i class="bi bi-geo-alt me-1"></i>Desa Tanjung Agung
+</span>
+<span class="badge rounded-pill" style="background:var(--krem-2);color:var(--coklat-600)">
+<i class="bi bi-calendar3 me-1"></i>{{ date('Y') }}
+</span>
+</div>
+</div>
+</div>
+</div>
+</div>
 </section>
 
 <footer class="py-4">
-  <div class="container d-flex flex-wrap justify-content-between gap-2 small">
-    <span><i class="bi bi-egg-fried me-1"></i> BukanAyam — Desa Tanjung Agung</span>
-    <span>© {{ date('Y') }} Sistem Manajemen Peternakan Ayam</span>
-  </div>
+<div class="container d-flex flex-wrap justify-content-between gap-2 small">
+<span><i class="bi bi-egg-fried me-1"></i> BukanAyam — Desa Tanjung Agung</span>
+<span>© {{ date('Y') }} Sistem Manajemen Peternakan Ayam</span>
+</div>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-  const nav = document.getElementById('navLanding');
-  function onScroll(){
-    if (window.scrollY > 30) nav.classList.add('scrolled');
-    else nav.classList.remove('scrolled');
-  }
-  window.addEventListener('scroll', onScroll, { passive: true });
-  onScroll();
+const nav = document.getElementById('navLanding');
+function onScroll(){
+if (window.scrollY > 30) nav.classList.add('scrolled');
+else nav.classList.remove('scrolled');
+}
+window.addEventListener('scroll', onScroll, { passive: true });
+onScroll();
 </script>
-
-{{-- ===== ANIMASI KURSOR AYAM (dari file partial) ===== --}}
-@include('partials.cursor-animation')
 </body>
 </html>
 
@@ -5111,44 +5118,127 @@ footer{background:var(--coklat-900);color:#cbb5a8}
 
 
 ===== C:\xampp\htdocs\peternakan_ayam\resources\views\auth\login.blade.php =====
-<x-guest-layout>
-    <div class="card border-0 shadow-sm">
-        <div class="card-body p-4">
-            <div class="text-center mb-4">
-                <div class="egg-wobble d-inline-flex align-items-center justify-content-center rounded-3 mb-2"
-                     style="width:52px;height:52px;background:#6d4c41;color:#ffe9c9;font-size:26px;">
-                    <i class="bi bi-egg-fried"></i>
-                </div>
-                <h4 class="fw-bold mb-0">BukanAyam</h4>
-                <small class="text-muted">Sistem Manajemen Peternakan Ayam<br>Desa Tanjung Agung</small>
-            </div>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login — BukanAyam</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --primary: #6d4c41;
+  --primary-dark: #5d4037;
+  --krem: #f7f2ea;
+  --krem-2: #efe6d9;
+  --aksen: #d7a86e;
+  --text: #33261f;
+  --muted: #8a7a6e;
+  --border: #e6dacc;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #fdf9f0 0%, var(--krem) 45%, var(--krem-2) 75%, #e8d5bd 100%);
+  color: var(--text);
+}
+.login-wrap { width: 100%; max-width: 430px; padding: 24px; text-align: center; }
 
-            @if (session('status'))
-                <div class="alert alert-info py-2 small">{{ session('status') }}</div>
-            @endif
+/* ===== IKON ===== */
+.login-icon {
+  color: var(--primary);
+  font-size: 108px; line-height: 1; margin-bottom: 30px;
+  filter: drop-shadow(0 6px 14px rgba(93,64,55,.25));
+}
 
-            <form method="POST" action="{{ route('login') }}">
-                @csrf
-                <div class="mb-3">
-                    <label class="form-label">Email</label>
-                    <input type="email" name="email" class="form-control @error('email') is-invalid @enderror"
-                        value="{{ old('email') }}" required autofocus>
-                    @error('email') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Password</label>
-                    <input type="password" name="password" class="form-control @error('password') is-invalid @enderror" required>
-                    @error('password') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                </div>
-                <div class="form-check mb-3">
-                    <input class="form-check-input" type="checkbox" name="remember" id="remember">
-                    <label class="form-check-label small" for="remember">Ingat saya</label>
-                </div>
-                <button class="btn btn-success w-100">Masuk</button>
-            </form>
+/* ===== ALERT ===== */
+.err-box {
+  background: #fff; border: 1px solid #f8d7da; color: #842029;
+  border-radius: 12px; padding: 10px 14px; font-size: 12.5px;
+  margin-bottom: 14px; text-align: left;
+}
+.err-box.info { border-color: var(--border); color: var(--primary-dark); }
+
+/* ===== INPUT PIL ===== */
+.field {
+  display: flex; align-items: center;
+  background: #fff; border: 1px solid var(--border); border-radius: 999px;
+  height: 52px; padding: 0 20px; margin-bottom: 16px;
+  box-shadow: 0 4px 14px rgba(93,64,55,.08);
+  transition: .2s;
+}
+.field:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(109,76,65,.15); }
+.f-icon { color: var(--muted); font-size: 17px; flex-shrink: 0; }
+.divider { width: 1px; height: 26px; background: var(--border); margin: 0 14px; flex-shrink: 0; }
+.field input {
+  border: 0; outline: 0; background: transparent; width: 100%;
+  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500;
+  letter-spacing: 1.5px; color: var(--text);
+}
+.field input::placeholder { color: #b3a294; }
+
+/* ===== OPSI ===== */
+.opts { display: flex; justify-content: space-between; align-items: center; margin: 2px 8px 24px; font-size: 12.5px; }
+.remember { display: flex; align-items: center; gap: 7px; color: var(--muted); cursor: pointer; }
+.remember input { accent-color: var(--primary); width: 15px; height: 15px; cursor: pointer; }
+.forgot { color: var(--primary); text-decoration: none; font-weight: 600; }
+.forgot:hover { color: var(--primary-dark); text-decoration: underline; }
+
+/* ===== TOMBOL LOGIN ===== */
+.btn-login {
+  background: var(--primary); color: #fff; border: 0; border-radius: 999px;
+  height: 50px; padding: 0 64px;
+  font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 700; letter-spacing: 2px;
+  cursor: pointer; box-shadow: 0 6px 18px rgba(93,64,55,.35);
+  transition: .2s;
+}
+.btn-login:hover { background: var(--primary-dark); transform: translateY(-1px); }
+.btn-login:active { transform: translateY(0); }
+
+.home-link { display: inline-block; margin-top: 26px; font-size: 12px; color: var(--muted); text-decoration: none; }
+.home-link:hover { color: var(--primary-dark); text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="login-wrap">
+    <div class="login-icon"><i class="bi bi-people-fill"></i></div>
+
+    @if (session('status'))
+        <div class="err-box info"><i class="bi bi-info-circle me-1"></i>{{ session('status') }}</div>
+    @endif
+    @if ($errors->any())
+        <div class="err-box"><i class="bi bi-exclamation-circle me-1"></i>{{ $errors->first() }}</div>
+    @endif
+
+    <form method="POST" action="{{ route('login') }}">
+        @csrf
+        <div class="field">
+            <i class="bi bi-person-fill f-icon"></i>
+            <span class="divider"></span>
+            <input type="email" name="email" placeholder="EMAIL"
+                   value="{{ old('email') }}" required autofocus autocomplete="username">
         </div>
-    </div>
-</x-guest-layout>
+        <div class="field">
+            <i class="bi bi-lock-fill f-icon"></i>
+            <span class="divider"></span>
+            <input type="password" name="password" placeholder="PASSWORD"
+                   required autocomplete="current-password">
+        </div>
+        <div class="opts">
+            <label class="remember"><input type="checkbox" name="remember"> Ingat saya</label>
+            <a class="forgot" href="{{ route('password.request') }}">Lupa password?</a>
+        </div>
+        <button type="submit" class="btn-login">LOGIN</button>
+    </form>
+
+    <a class="home-link" href="{{ url('/') }}"><i class="bi bi-arrow-left me-1"></i>Kembali ke beranda</a>
+</div>
+</body>
+</html>
 
 
 ===== C:\xampp\htdocs\peternakan_ayam\resources\views\auth\register.blade.php =====
@@ -6127,61 +6217,133 @@ $classes = ($active ?? false)
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root {
-  --primary: #6d4c41;
-  --primary-dark: #5d4037;
-  --sidebar: #2d1b16;
-  --sidebar-hover: #4e342e;
-  --background: #f7f2ea;
-  --card: #ffffff;
-  --text: #33261f;
-  --muted: #8a7a6e;
-  --border: #e6dacc;
-  --drawer-width: 380px;
-  --sidebar-width: 260px;
+--primary: #6d4c41;
+--primary-dark: #5d4037;
+--primary-soft: #f3ede6;
+--sidebar-bg: #fdfcfa;
+--background: #f7f2ea;
+--card: #ffffff;
+--text: #33261f;
+--muted: #8a7a6e;
+--border: #e6dacc;
+--drawer-width: 380px;
+--sidebar-width: 264px;
+--sidebar-slim: 84px;
+--sidebar-gap: 16px;
 }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background); color: var(--text); }
 
 /* ===== SIDEBAR ===== */
-.sidebar { width: var(--sidebar-width); height: 100vh; position: fixed; left: 0; top: 0; background: var(--sidebar); color: white; z-index: 1000; transition: transform .3s ease; overflow-y: auto; }
-.brand { height: 75px; display: flex; align-items: center; padding: 0 24px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-.brand-icon { width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; background: var(--primary); border-radius: 12px; font-size: 22px; margin-right: 12px; flex-shrink: 0; }
+.sidebar {
+position: fixed; left: var(--sidebar-gap); top: var(--sidebar-gap); bottom: var(--sidebar-gap);
+width: var(--sidebar-width);
+background: var(--sidebar-bg);
+border: 1px solid var(--border);
+border-radius: 20px;
+z-index: 1000;
+display: flex; flex-direction: column;
+overflow: hidden;
+transition: width .3s ease, transform .3s ease;
+box-shadow: 0 10px 30px rgba(93, 64, 55, .06);
+}
+.brand { display: flex; align-items: center; gap: 12px; padding: 20px 20px 12px; }
+.brand-icon {
+width: 42px; height: 42px; border-radius: 50%;
+background: var(--primary); color: #fff;
+display: flex; align-items: center; justify-content: center;
+font-size: 18px; flex-shrink: 0;
+}
 .brand-icon i { display: inline-block; animation: wobble 2.6s ease-in-out infinite; }
-.brand-title { font-size: 18px; font-weight: 800; }
-.brand-subtitle { font-size: 11px; color: #cbb5a8; }
-.sidebar-content { padding: 20px 14px; }
-.menu-title { font-size: 11px; font-weight: 700; color: #a1887f; text-transform: uppercase; padding: 15px 12px 8px; letter-spacing: 0.8px; }
-.sidebar a { color: #e5d8cf; text-decoration: none; display: flex; align-items: center; gap: 12px; padding: 11px 13px; border-radius: 9px; margin-bottom: 3px; font-size: 14px; transition: 0.2s; }
-.sidebar a:hover { background: var(--sidebar-hover); color: white; }
-.sidebar a.active { background: var(--primary); color: white; }
-.sidebar a i { font-size: 17px; }
-.sidebar-footer { padding: 14px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 20px; }
+.brand-title { font-size: 17px; font-weight: 800; color: var(--text); line-height: 1.1; }
+.brand-subtitle { font-size: 11px; color: var(--muted); }
 
-/* ===== OVERLAY (gelap, saat sidebar terbuka di HP) ===== */
+/* Search */
+.sidebar-search { padding: 0 16px 10px; }
+.search-box {
+display: flex; align-items: center; gap: 8px;
+background: #f1ece5; border-radius: 999px; padding: 9px 14px;
+}
+.search-box i { color: var(--muted); font-size: 14px; }
+.search-box input { border: 0; background: transparent; outline: none; width: 100%; font-size: 13px; color: var(--text); }
+
+/* Menu */
+.sidebar-content { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 6px 14px 14px; }
+.sidebar-content::-webkit-scrollbar { width: 4px; }
+.sidebar-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.menu-title {
+font-size: 10.5px; font-weight: 700; color: var(--muted);
+text-transform: uppercase; letter-spacing: .8px;
+padding: 12px 12px 6px;
+}
+.sidebar-content a.menu-link,
+.sidebar-content button.menu-parent {
+display: flex; align-items: center; gap: 12px;
+padding: 11px 12px; margin-bottom: 2px;
+border-radius: 12px; position: relative;
+color: #6b6259; font-size: 14px; font-weight: 500; text-decoration: none;
+transition: background .15s ease, color .15s ease;
+}
+.sidebar-content a.menu-link i,
+.sidebar-content button.menu-parent i:first-child { font-size: 17px; width: 22px; text-align: center; flex-shrink: 0; }
+.sidebar-content a.menu-link:hover,
+.sidebar-content button.menu-parent:hover { background: var(--primary-soft); color: var(--primary-dark); }
+.sidebar-content a.menu-link.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+.sidebar-content a.menu-link.active::before {
+content: ''; position: absolute; left: -14px; top: 9px; bottom: 9px;
+width: 4px; border-radius: 4px; background: var(--primary);
+}
+.menu-label { white-space: nowrap; }
+.menu-badge {
+margin-left: auto; background: #ece5dc; color: #6b6259;
+border-radius: 999px; font-size: 10.5px; font-weight: 700; padding: 2px 8px;
+}
+.menu-badge.accent { background: var(--primary); color: #fff; }
+
+/* ===== DROPDOWN MENU ===== */
+button.menu-parent { width: 100%; border: 0; background: transparent; font-family: inherit; cursor: pointer; }
+.menu-parent .arrow { margin-left: auto; font-size: 12px !important; width: auto !important; color: var(--muted); transition: transform .25s ease; }
+.menu-parent[aria-expanded="true"] .arrow { transform: rotate(180deg); }
+.menu-group.open > .menu-parent { color: var(--primary); font-weight: 600; }
+.menu-sub { margin: 2px 0 6px 27px; border-left: 1px solid var(--border); padding-left: 10px; }
+.menu-sub a.menu-link { padding: 8px 10px; font-size: 13px; }
+.menu-sub a.menu-link i { font-size: 14px !important; }
+.menu-sub a.menu-link.active::before { display: none; }
+
+/* Footer sidebar */
+.sidebar-footer { padding: 12px 14px; border-top: 1px solid var(--border); }
+.btn-logout {
+display: flex; align-items: center; gap: 12px; width: 100%;
+border: 0; background: transparent; color: #6b6259;
+padding: 10px 12px; border-radius: 12px; font-size: 14px; cursor: pointer;
+}
+.btn-logout i { font-size: 16px; width: 22px; text-align: center; }
+.btn-logout:hover { background: #f8d7da; color: #842029; }
+
+/* ===== OVERLAY (mobile) ===== */
 .sidebar-overlay { position: fixed; inset: 0; background: rgba(20,10,5,.5); z-index: 999; opacity: 0; visibility: hidden; transition: opacity .25s ease, visibility .25s ease; }
 
 /* ===== MAIN ===== */
-.main { margin-left: var(--sidebar-width); min-height: 100vh; transition: margin-left .3s ease, width .35s ease; width: calc(100% - var(--sidebar-width)); }
-
-/* ✅ PERBAIKAN: efek terbelah saat drawer laporan dibuka */
-.main.drawer-open { width: calc(100% - var(--sidebar-width) - var(--drawer-width)); }
-
+.main {
+margin-left: calc(var(--sidebar-width) + var(--sidebar-gap) * 2);
+width: calc(100% - (var(--sidebar-width) + var(--sidebar-gap) * 2));
+min-height: 100vh;
+transition: margin-left .3s ease, width .35s ease;
+}
+.main.drawer-open { width: calc(100% - (var(--sidebar-width) + var(--sidebar-gap) * 2) - var(--drawer-width)); }
 .topbar { height: 75px; background: white; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 30px; gap: 12px; position: sticky; top: 0; z-index: 900; }
 .topbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .page-title { font-size: 18px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .page-subtitle { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .profile { display: flex; align-items: center; gap: 10px; }
 .profile-avatar { width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; background: #e8d5bd; color: var(--primary-dark); border-radius: 50%; font-weight: 700; flex-shrink: 0; }
-.btn-logout { background: transparent; border: 1px solid var(--border); color: #ffffff; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; transition: 0.2s; }
-.btn-logout:hover { background: #f8d7da; color: #842029; border-color: #f8d7da; }
 .content { padding: 30px; }
 
-/* ===== TOMBOL TOGGLE SIDEBAR (☰) ===== */
 .btn-toggle-sidebar {
-  width: 40px; height: 40px; flex-shrink: 0;
-  display: none; align-items: center; justify-content: center;
-  background: #fff; border: 1px solid var(--border); border-radius: 10px;
-  font-size: 18px; color: var(--text); cursor: pointer; transition: .2s;
+width: 40px; height: 40px; flex-shrink: 0;
+display: none; align-items: center; justify-content: center;
+background: #fff; border: 1px solid var(--border); border-radius: 10px;
+font-size: 18px; color: var(--text); cursor: pointer; transition: .2s;
 }
 .btn-toggle-sidebar:hover { background: var(--background); }
 
@@ -6197,44 +6359,40 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 .stat-label { color: var(--muted); font-size: 13px; margin-top: 16px; }
 .stat-value { font-size: 27px; font-weight: 800; margin-top: 4px; }
 .stat-description { color: var(--muted); font-size: 11px; margin-top: 4px; }
-
 .panel { background: white; border: 1px solid var(--border); border-radius: 16px; padding: 22px; height: 100%; }
 .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .panel-title { font-size: 16px; font-weight: 700; }
 .panel-link { color: var(--primary); text-decoration: none; font-size: 13px; font-weight: 600; }
-
 .table { vertical-align: middle; }
 .table thead th { font-size: 12px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
 .table tbody td { font-size: 13px; border-color: #f0e9df; }
-
 .btn-primary { background: var(--primary); border-color: var(--primary); }
 .btn-primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
 .btn-success { background: var(--primary); border-color: var(--primary); }
 .btn-success:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
 .badge.bg-success { background: var(--primary) !important; }
-
 @keyframes wobble { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); } }
 
 /* ===== FLOATING BUTTON & DRAWER ===== */
 .btn-float-laporan {
-  position: fixed; right: 22px; bottom: 22px; z-index: 1040;
-  width: 56px; height: 56px; border-radius: 50%;
-  background: var(--primary); color: #fff; border: none; font-size: 22px;
-  box-shadow: 0 8px 20px rgba(45,27,22,.35);
-  display: flex; align-items: center; justify-content: center;
-  transition: transform .2s ease, background .2s ease, right .35s ease;
+position: fixed; right: 22px; bottom: 22px; z-index: 1040;
+width: 56px; height: 56px; border-radius: 50%;
+background: var(--primary); color: #fff; border: none; font-size: 22px;
+box-shadow: 0 8px 20px rgba(45,27,22,.35);
+display: flex; align-items: center; justify-content: center;
+transition: transform .2s ease, background .2s ease, right .35s ease;
 }
 .btn-float-laporan:hover { transform: translateY(-3px); background: var(--primary-dark); }
 .btn-float-laporan .badge-count {
-  position: absolute; top: -4px; right: -4px;
-  background: #d93636; color: #fff; font-size: 10px; font-weight: 700;
-  border-radius: 999px; padding: 3px 6px;
+position: absolute; top: -4px; right: -4px;
+background: #d93636; color: #fff; font-size: 10px; font-weight: 700;
+border-radius: 999px; padding: 3px 6px;
 }
 body.drawer-open .btn-float-laporan { right: calc(var(--drawer-width) + 22px); }
 #laporanDrawer {
-  --bs-offcanvas-width: var(--drawer-width);
-  box-shadow: -8px 0 24px rgba(0,0,0,.18);
-  border-left: 1px solid var(--border);
+--bs-offcanvas-width: var(--drawer-width);
+box-shadow: -8px 0 24px rgba(0,0,0,.18);
+border-left: 1px solid var(--border);
 }
 .laporan-item { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; background: #fff; }
 .laporan-item .head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
@@ -6242,35 +6400,48 @@ body.drawer-open .btn-float-laporan { right: calc(var(--drawer-width) + 22px); }
 .laporan-item .grid .v { font-weight: 700; font-size: 13px; }
 .laporan-item .grid .l { font-size: 10px; color: var(--muted); }
 
-/* ===== DESKTOP: tombol ☰ untuk collapse sidebar ===== */
+/* ===== DESKTOP: collapse jadi slim (ikon saja) ===== */
 @media (min-width: 992px) {
-  .btn-toggle-sidebar { display: flex; }
-  body.sidebar-collapsed .sidebar { transform: translateX(-100%); }
-  body.sidebar-collapsed .main { margin-left: 0; width: 100%; }
-  body.sidebar-collapsed .main.drawer-open { width: calc(100% - var(--drawer-width)); }
+.btn-toggle-sidebar { display: flex; }
+body.sidebar-collapsed .sidebar { width: var(--sidebar-slim); }
+body.sidebar-collapsed .brand { justify-content: center; padding: 20px 0 12px; }
+body.sidebar-collapsed .brand-text,
+body.sidebar-collapsed .sidebar-search,
+body.sidebar-collapsed .menu-title,
+body.sidebar-collapsed .menu-label,
+body.sidebar-collapsed .menu-badge,
+body.sidebar-collapsed .menu-parent .arrow,
+body.sidebar-collapsed .menu-sub { display: none; }
+body.sidebar-collapsed .sidebar-content a.menu-link,
+body.sidebar-collapsed .sidebar-content button.menu-parent { justify-content: center; padding: 12px 0; }
+body.sidebar-collapsed .btn-logout { justify-content: center; }
+body.sidebar-collapsed .main {
+margin-left: calc(var(--sidebar-slim) + var(--sidebar-gap) * 2);
+width: calc(100% - (var(--sidebar-slim) + var(--sidebar-gap) * 2));
+}
+body.sidebar-collapsed .main.drawer-open {
+width: calc(100% - (var(--sidebar-slim) + var(--sidebar-gap) * 2) - var(--drawer-width));
+}
 }
 
-/* ===== MOBILE / TABLET: sidebar jadi off-canvas ===== */
+/* ===== MOBILE / TABLET: off-canvas ===== */
 @media (max-width: 991px) {
-  .btn-toggle-sidebar { display: flex; }
-  .sidebar { transform: translateX(-100%); }
-  body.sidebar-open .sidebar { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,.35); }
-  body.sidebar-open .sidebar-overlay { opacity: 1; visibility: visible; }
-  .main { margin-left: 0; width: 100% !important; }
-  .main.drawer-open { width: 100% !important; }
-  body.drawer-open .btn-float-laporan { right: 22px; }
-  .content { padding: 16px; }
-  .topbar { padding: 0 16px; height: 64px; }
-  .page-title { font-size: 16px; }
-  .page-subtitle { font-size: 11px; }
-  .stat-value { font-size: 22px; }
-  .brand { height: 64px; }
+.btn-toggle-sidebar { display: flex; }
+.sidebar { transform: translateX(calc(-100% - var(--sidebar-gap) * 2)); }
+body.sidebar-open .sidebar { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,.35); }
+body.sidebar-open .sidebar-overlay { opacity: 1; visibility: visible; }
+.main { margin-left: 0 !important; width: 100% !important; }
+.main.drawer-open { width: 100% !important; }
+body.drawer-open .btn-float-laporan { right: 22px; }
+.content { padding: 16px; }
+.topbar { padding: 0 16px; height: 64px; }
+.page-title { font-size: 16px; }
+.page-subtitle { font-size: 11px; }
+.stat-value { font-size: 22px; }
 }
-
-/* ===== HP KECIL ===== */
 @media (max-width: 480px) {
-  #laporanDrawer { --bs-offcanvas-width: min(var(--drawer-width), 92vw); }
-  .content { padding: 12px; }
+#laporanDrawer { --bs-offcanvas-width: min(var(--drawer-width), 92vw); }
+.content { padding: 12px; }
 }
 </style>
 @stack('styles')
@@ -6279,248 +6450,320 @@ body.drawer-open .btn-float-laporan { right: calc(var(--drawer-width) + 22px); }
 @php
 $user = auth()->user();
 $isAdmin = $user && ($user->role ?? '') === 'admin';
+$laporanHariIni = $isAdmin ? \App\Models\LaporanHarian::whereDate('tanggal', today())->count() : 0;
 @endphp
 
 <aside class="sidebar" id="sidebar">
-    <div class="brand">
-        <div class="brand-icon"><i class="bi bi-egg-fried"></i></div>
-        <div>
-            <div class="brand-title">BukanAyam</div>
-            <div class="brand-subtitle">Peternakan Ayam</div>
+<div class="brand">
+<div class="brand-icon"><i class="bi bi-egg-fried"></i></div>
+<div class="brand-text">
+<div class="brand-title">BukanAyam</div>
+<div class="brand-subtitle">Peternakan Ayam</div>
+</div>
+</div>
+
+@if ($isAdmin)
+<div class="sidebar-search">
+<div class="search-box">
+<i class="bi bi-search"></i>
+<input id="sidebarSearch" type="text" placeholder="Cari menu...">
+</div>
+</div>
+@endif
+
+<div class="sidebar-content">
+@if ($isAdmin)
+    <div class="menu-title">Menu Utama</div>
+    <a href="{{ route('dashboard') }}" class="menu-link {{ request()->routeIs('dashboard') ? 'active' : '' }}">
+        <i class="bi bi-grid-1x2-fill"></i><span class="menu-label">Dashboard</span>
+    </a>
+
+    <div class="menu-title">Data & Transaksi</div>
+
+    {{-- ===== DROPDOWN: PETERNAKAN ===== --}}
+    @php $openPeternakan = request()->is('kandang*','populasi*','bobot*'); @endphp
+    <div class="menu-group {{ $openPeternakan ? 'open' : '' }}">
+        <button type="button" class="menu-parent" data-bs-toggle="collapse" data-bs-target="#mPeternakan"
+                aria-expanded="{{ $openPeternakan ? 'true' : 'false' }}">
+            <i class="bi bi-house-door-fill"></i><span class="menu-label">Peternakan</span>
+            <i class="bi bi-chevron-down arrow"></i>
+        </button>
+        <div class="collapse {{ $openPeternakan ? 'show' : '' }}" id="mPeternakan">
+            <div class="menu-sub">
+                <a href="{{ route('kandang.index') }}" class="menu-link {{ request()->is('kandang*') ? 'active' : '' }}">
+                    <i class="bi bi-house-door"></i><span class="menu-label">Kandang</span>
+                </a>
+                <a href="{{ route('populasi.index') }}" class="menu-link {{ request()->is('populasi*') ? 'active' : '' }}">
+                    <i class="bi bi-people-fill"></i><span class="menu-label">Populasi Ayam</span>
+                </a>
+                <a href="{{ route('bobot.index') }}" class="menu-link {{ request()->is('bobot*') ? 'active' : '' }}">
+                    <i class="bi bi-speedometer2"></i><span class="menu-label">Bobot Ayam</span>
+                </a>
+            </div>
         </div>
     </div>
-    <div class="sidebar-content">
-        @if ($isAdmin)
-            <div class="menu-title">Menu Utama</div>
-            <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">
-                <i class="bi bi-grid-1x2-fill"></i> Dashboard
-            </a>
-            <div class="menu-title">Data Peternakan</div>
-            <a href="{{ route('kandang.index') }}" class="{{ request()->is('kandang*') ? 'active' : '' }}">
-                <i class="bi bi-house-door-fill"></i> Kandang
-            </a>
-            <a href="{{ route('populasi.index') }}" class="{{ request()->is('populasi*') ? 'active' : '' }}">
-                <i class="bi bi-people-fill"></i> Populasi Ayam
-            </a>
-            <a href="{{ route('bobot.index') }}" class="{{ request()->is('bobot*') ? 'active' : '' }}">
-                <i class="bi bi-speedometer2"></i> Bobot Ayam
-            </a>
-            <div class="menu-title">Produksi</div>
-            <a href="{{ route('produksi-telur.index') }}" class="{{ request()->is('produksi-telur*') ? 'active' : '' }}">
-                <i class="bi bi-egg-fill"></i> Produksi Telur
-            </a>
-            <a href="{{ route('penjualan-telur.index') }}" class="{{ request()->is('penjualan-telur*') ? 'active' : '' }}">
-                <i class="bi bi-cash-stack"></i> Penjualan Telur
-            </a>
-            <a href="{{ route('stok-telur.index') }}" class="{{ request()->is('stok-telur*') ? 'active' : '' }}">
-                <i class="bi bi-boxes"></i> Stok Telur
-            </a>
-            <a href="{{ route('gudang-telur.index') }}" class="{{ request()->is('gudang-telur*') ? 'active' : '' }}">
-                <i class="bi bi-building"></i> Gudang Telur
-            </a>
-            <div class="menu-title">Keuangan</div>
-            <a href="{{ route('arus-kas.index') }}" class="{{ request()->is('arus-kas*') ? 'active' : '' }}">
-                <i class="bi bi-cash-coin"></i> Arus Kas
-            </a>
-            <div class="menu-title">Pakan</div>
-            <a href="{{ route('pakan-kandang.index') }}" class="{{ request()->is('pakan-kandang*') ? 'active' : '' }}">
-                <i class="bi bi-box-seam-fill"></i> Stok Pakan
-            </a>
-            <a href="{{ route('pemberian-pakan.index') }}" class="{{ request()->is('pemberian-pakan*') ? 'active' : '' }}">
-                <i class="bi bi-basket-fill"></i> Pemberian Pakan
-            </a>
-            <a href="{{ route('pakan.laporan') }}" class="{{ request()->is('laporan-pakan*') ? 'active' : '' }}">
-                <i class="bi bi-bar-chart-fill"></i> Laporan Pakan
-            </a>
-            <div class="menu-title">Man Power</div>
-            <a href="{{ route('admin.laporan.index') }}" class="{{ request()->is('admin/laporan*') ? 'active' : '' }}">
-                <i class="bi bi-clipboard2-data-fill"></i> Laporan Harian
-            </a>
-        @else
-            <div class="menu-title">Menu</div>
-            <a href="{{ route('manpower.laporan.create') }}" class="{{ request()->routeIs('manpower.laporan.*') ? 'active' : '' }}">
-                <i class="bi bi-pencil-square"></i> Input Laporan Harian
-            </a>
+
+    {{-- ===== DROPDOWN: PRODUKSI ===== --}}
+    @php $openProduksi = request()->is('produksi-telur*','stok-telur*','gudang-telur*'); @endphp
+    <div class="menu-group {{ $openProduksi ? 'open' : '' }}">
+        <button type="button" class="menu-parent" data-bs-toggle="collapse" data-bs-target="#mProduksi"
+                aria-expanded="{{ $openProduksi ? 'true' : 'false' }}">
+            <i class="bi bi-egg-fill"></i><span class="menu-label">Produksi</span>
+            <i class="bi bi-chevron-down arrow"></i>
+        </button>
+        <div class="collapse {{ $openProduksi ? 'show' : '' }}" id="mProduksi">
+            <div class="menu-sub">
+                <a href="{{ route('produksi-telur.index') }}" class="menu-link {{ request()->is('produksi-telur*') ? 'active' : '' }}">
+                    <i class="bi bi-egg"></i><span class="menu-label">Produksi Telur</span>
+                </a>
+                <a href="{{ route('stok-telur.index') }}" class="menu-link {{ request()->is('stok-telur*') ? 'active' : '' }}">
+                    <i class="bi bi-boxes"></i><span class="menu-label">Stok Telur</span>
+                </a>
+                <a href="{{ route('gudang-telur.index') }}" class="menu-link {{ request()->is('gudang-telur*') ? 'active' : '' }}">
+                    <i class="bi bi-building"></i><span class="menu-label">Gudang Telur</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    {{-- ===== DROPDOWN: PENJUALAN & KEUANGAN ===== --}}
+    @php $openJual = request()->is('penjualan-telur*','arus-kas*'); @endphp
+    <div class="menu-group {{ $openJual ? 'open' : '' }}">
+        <button type="button" class="menu-parent" data-bs-toggle="collapse" data-bs-target="#mJual"
+                aria-expanded="{{ $openJual ? 'true' : 'false' }}">
+            <i class="bi bi-cash-stack"></i><span class="menu-label">Penjualan</span>
+            <i class="bi bi-chevron-down arrow"></i>
+        </button>
+        <div class="collapse {{ $openJual ? 'show' : '' }}" id="mJual">
+            <div class="menu-sub">
+                <a href="{{ route('penjualan-telur.index') }}" class="menu-link {{ request()->is('penjualan-telur*') ? 'active' : '' }}">
+                    <i class="bi bi-cart-fill"></i><span class="menu-label">Penjualan Telur</span>
+                </a>
+                <a href="{{ route('arus-kas.index') }}" class="menu-link {{ request()->is('arus-kas*') ? 'active' : '' }}">
+                    <i class="bi bi-cash-coin"></i><span class="menu-label">Arus Kas</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    {{-- ===== DROPDOWN: PAKAN ===== --}}
+    @php $openPakan = request()->is('pakan-kandang*','pemberian-pakan*','laporan-pakan*'); @endphp
+    <div class="menu-group {{ $openPakan ? 'open' : '' }}">
+        <button type="button" class="menu-parent" data-bs-toggle="collapse" data-bs-target="#mPakan"
+                aria-expanded="{{ $openPakan ? 'true' : 'false' }}">
+            <i class="bi bi-basket-fill"></i><span class="menu-label">Pakan</span>
+            <i class="bi bi-chevron-down arrow"></i>
+        </button>
+        <div class="collapse {{ $openPakan ? 'show' : '' }}" id="mPakan">
+            <div class="menu-sub">
+                <a href="{{ route('pakan-kandang.index') }}" class="menu-link {{ request()->is('pakan-kandang*') ? 'active' : '' }}">
+                    <i class="bi bi-box-seam-fill"></i><span class="menu-label">Stok Pakan</span>
+                </a>
+                <a href="{{ route('pemberian-pakan.index') }}" class="menu-link {{ request()->is('pemberian-pakan*') ? 'active' : '' }}">
+                    <i class="bi bi-basket2-fill"></i><span class="menu-label">Pemberian Pakan</span>
+                </a>
+                <a href="{{ route('pakan.laporan') }}" class="menu-link {{ request()->is('laporan-pakan*') ? 'active' : '' }}">
+                    <i class="bi bi-bar-chart-fill"></i><span class="menu-label">Laporan Pakan</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="menu-title">Man Power</div>
+    <a href="{{ route('admin.laporan.index') }}" class="menu-link {{ request()->is('admin/laporan*') ? 'active' : '' }}">
+        <i class="bi bi-clipboard2-data-fill"></i><span class="menu-label">Laporan Harian</span>
+        @if ($laporanHariIni > 0)
+            <span class="menu-badge accent">{{ $laporanHariIni }}</span>
         @endif
-        <div class="sidebar-footer">
-            <form method="POST" action="{{ route('logout') }}">
-                @csrf
-                <button type="submit" class="btn-logout w-100 text-start d-flex align-items-center gap-2">
-                    <i class="bi bi-box-arrow-right"></i> Keluar
-                </button>
-            </form>
-        </div>
-    </div>
+    </a>
+@else
+    <div class="menu-title">Menu</div>
+    <a href="{{ route('manpower.laporan.create') }}" class="menu-link {{ request()->routeIs('manpower.laporan.*') ? 'active' : '' }}">
+        <i class="bi bi-pencil-square"></i><span class="menu-label">Input Laporan Harian</span>
+    </a>
+@endif
+</div>
+
+<div class="sidebar-footer">
+<form method="POST" action="{{ route('logout') }}">
+@csrf
+<button type="submit" class="btn-logout">
+<i class="bi bi-box-arrow-right"></i><span class="menu-label">Keluar</span>
+</button>
+</form>
+</div>
 </aside>
 
-{{-- Overlay gelap saat sidebar terbuka di HP --}}
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
 <div class="main" id="mainArea">
-    <header class="topbar">
-        <div class="topbar-left">
-            <button class="btn-toggle-sidebar" id="btnToggleSidebar" type="button" title="Buka / tutup menu">
-                <i class="bi bi-list"></i>
-            </button>
-            <div>
-                <div class="page-title">@yield('title', 'Dashboard')</div>
-                <div class="page-subtitle">Sistem Manajemen Peternakan Ayam</div>
-            </div>
-        </div>
-        <div class="profile">
-            @auth
-                <div class="profile-avatar">{{ strtoupper(substr($user->name ?? 'U', 0, 1)) }}</div>
-                <div class="d-none d-md-block">
-                    <div style="font-size:13px;font-weight:600;">{{ $user->name ?? 'User' }}</div>
-                    <div style="font-size:11px;color:#8a7a6e;">{{ ucfirst($user->role ?? 'user') }}</div>
-                </div>
-            @else
-                <div class="profile-avatar">?</div>
-            @endauth
-        </div>
-    </header>
+<header class="topbar">
+<div class="topbar-left">
+<button class="btn-toggle-sidebar" id="btnToggleSidebar" type="button" title="Buka / tutup menu">
+<i class="bi bi-list"></i>
+</button>
+<div>
+<div class="page-title">@yield('title', 'Dashboard')</div>
+<div class="page-subtitle">Sistem Manajemen Peternakan Ayam</div>
+</div>
+</div>
+<div class="profile">
+@auth
+<div class="profile-avatar">{{ strtoupper(substr($user->name ?? 'U', 0, 1)) }}</div>
+<div class="d-none d-md-block">
+<div style="font-size:13px;font-weight:600;">{{ $user->name ?? 'User' }}</div>
+<div style="font-size:11px;color:#8a7a6e;">{{ ucfirst($user->role ?? 'user') }}</div>
+</div>
+@else
+<div class="profile-avatar">?</div>
+@endauth
+</div>
+</header>
 
-    <main class="content">
-        @if(session('success'))
-            <div class="alert alert-success border-0 shadow-sm">
-                <i class="bi bi-check-circle-fill me-2"></i> {{ session('success') }}
-            </div>
-        @endif
-        @if($errors->any())
-            <div class="alert alert-danger border-0 shadow-sm">
-                <strong>Terjadi kesalahan:</strong>
-                <ul class="mb-0 mt-2">
-                    @foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach
-                </ul>
-            </div>
-        @endif
-        @yield('content')
-    </main>
+<main class="content">
+@if(session('success'))
+<div class="alert alert-success border-0 shadow-sm">
+<i class="bi bi-check-circle-fill me-2"></i> {{ session('success') }}
+</div>
+@endif
+@if($errors->any())
+<div class="alert alert-danger border-0 shadow-sm">
+<strong>Terjadi kesalahan:</strong>
+<ul class="mb-0 mt-2">
+@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach
+</ul>
+</div>
+@endif
+@yield('content')
+</main>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 @stack('scripts')
 
-{{-- ===== LOGIKA TOGGLE SIDEBAR (desktop collapse / mobile off-canvas) ===== --}}
 <script>
 (function () {
-    var btn     = document.getElementById('btnToggleSidebar');
-    var overlay = document.getElementById('sidebarOverlay');
-    var sidebar = document.getElementById('sidebar');
-    function isMobile() { return window.innerWidth < 992; }
+var btn     = document.getElementById('btnToggleSidebar');
+var overlay = document.getElementById('sidebarOverlay');
+var sidebar = document.getElementById('sidebar');
+function isMobile() { return window.innerWidth < 992; }
 
-    if (btn) btn.addEventListener('click', function () {
-        if (isMobile()) document.body.classList.toggle('sidebar-open');
-        else            document.body.classList.toggle('sidebar-collapsed');
-    });
+if (btn) btn.addEventListener('click', function () {
+if (isMobile()) document.body.classList.toggle('sidebar-open');
+else            document.body.classList.toggle('sidebar-collapsed');
+});
+if (overlay) overlay.addEventListener('click', function () {
+document.body.classList.remove('sidebar-open');
+});
+if (sidebar) sidebar.querySelectorAll('a').forEach(function (a) {
+a.addEventListener('click', function () {
+if (isMobile()) document.body.classList.remove('sidebar-open');
+});
+});
+window.addEventListener('resize', function () {
+if (!isMobile()) document.body.classList.remove('sidebar-open');
+});
 
-    if (overlay) overlay.addEventListener('click', function () {
-        document.body.classList.remove('sidebar-open');
-    });
-
-    if (sidebar) sidebar.querySelectorAll('a').forEach(function (a) {
-        a.addEventListener('click', function () {
-            if (isMobile()) document.body.classList.remove('sidebar-open');
-        });
-    });
-
-    window.addEventListener('resize', function () {
-        if (!isMobile()) document.body.classList.remove('sidebar-open');
-    });
+/* ===== SEARCH FILTER MENU (buka dropdown saat mencari) ===== */
+var searchInput = document.getElementById('sidebarSearch');
+if (searchInput) searchInput.addEventListener('input', function () {
+var q = this.value.trim().toLowerCase();
+document.querySelectorAll('.sidebar-content a.menu-link').forEach(function (a) {
+var label = a.querySelector('.menu-label');
+var text  = label ? label.textContent.toLowerCase() : '';
+a.style.display = (!q || text.indexOf(q) !== -1) ? '' : 'none';
+});
+document.querySelectorAll('.menu-group .collapse').forEach(function (el) {
+var inst = bootstrap.Collapse.getOrCreateInstance(el, { toggle: false });
+if (q) { inst.show(); }
+else if (el.querySelector('a.active')) { inst.show(); }
+else { inst.hide(); }
+});
+});
 })();
 </script>
 
 {{-- ===== FLOATING LAPORAN HARIAN (khusus admin) ===== --}}
 @if ($isAdmin)
 @php
-    $laporanFloating = \App\Models\LaporanHarian::with('kandang')
-        ->latest('tanggal')->latest('id')->limit(12)->get();
-    $laporanHariIni = \App\Models\LaporanHarian::whereDate('tanggal', today())->count();
+$laporanFloating = \App\Models\LaporanHarian::with('kandang')
+->latest('tanggal')->latest('id')->limit(12)->get();
 @endphp
-
 <button class="btn-float-laporan" type="button" data-bs-toggle="offcanvas"
-        data-bs-target="#laporanDrawer" aria-controls="laporanDrawer"
-        title="Lihat laporan harian terbaru">
-    <i class="bi bi-clipboard2-data-fill"></i>
-    @if($laporanHariIni > 0)
-        <span class="badge-count">{{ $laporanHariIni }}</span>
-    @endif
+data-bs-target="#laporanDrawer" aria-controls="laporanDrawer"
+title="Lihat laporan harian terbaru">
+<i class="bi bi-clipboard2-data-fill"></i>
+@if($laporanHariIni > 0)
+<span class="badge-count">{{ $laporanHariIni }}</span>
+@endif
 </button>
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="laporanDrawer"
-     aria-labelledby="laporanDrawerLabel"
-     data-bs-backdrop="false"
-     data-bs-scroll="true">
-    <div class="offcanvas-header" style="background: var(--sidebar); color:#fff;">
-        <h5 class="offcanvas-title fw-bold" id="laporanDrawerLabel">
-            <i class="bi bi-clipboard2-data-fill me-2"></i>Laporan Harian Terbaru
-        </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-    </div>
-    <div class="offcanvas-body">
-        @forelse($laporanFloating as $lap)
-            <div class="laporan-item">
-                <div class="head">
-                    <span>{{ $lap->tanggal->format('d/m/Y') }}</span>
-                    <span class="badge" style="background:var(--primary);color:#fff;">
-                        {{ $lap->kandang->nama ?? '-' }}
-                    </span>
-                </div>
-                <div class="grid">
-                    <div><div class="v">{{ number_format($lap->hidup) }}</div><div class="l">Hidup</div></div>
-                    <div><div class="v text-danger">{{ number_format($lap->mati) }}</div><div class="l">Mati</div></div>
-                    <div><div class="v text-warning">{{ number_format($lap->afkir) }}</div><div class="l">Afkir</div></div>
-                    <div><div class="v text-success">{{ number_format($lap->sisa_ayam) }}</div><div class="l">Sisa</div></div>
-                </div>
-                <div class="grid mt-1">
-                    <div><div class="v">{{ number_format($lap->total_pakan, 0) }}</div><div class="l">Pakan (kg)</div></div>
-                    <div><div class="v">{{ number_format($lap->produksi_telur) }}</div><div class="l">Telur</div></div>
-                    <div><div class="v">{{ number_format($lap->telur_pecah) }}</div><div class="l">Pecah</div></div>
-                    <div><div class="v">{{ $lap->umur_minggu }}</div><div class="l">Minggu</div></div>
-                </div>
-            </div>
-        @empty
-            <div class="text-center text-muted small py-4">
-                <i class="bi bi-inbox fs-3 d-block mb-2"></i>
-                Belum ada laporan harian.
-            </div>
-        @endforelse
-        <a href="{{ route('admin.laporan.index') }}" class="btn btn-sm btn-primary w-100">
-            Lihat Semua Laporan
-        </a>
-    </div>
+aria-labelledby="laporanDrawerLabel"
+data-bs-backdrop="false"
+data-bs-scroll="true">
+<div class="offcanvas-header" style="background: var(--primary); color:#fff;">
+<h5 class="offcanvas-title fw-bold" id="laporanDrawerLabel">
+<i class="bi bi-clipboard2-data-fill me-2"></i>Laporan Harian Terbaru
+</h5>
+<button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+</div>
+<div class="offcanvas-body">
+@forelse($laporanFloating as $lap)
+<div class="laporan-item">
+<div class="head">
+<span>{{ $lap->tanggal->format('d/m/Y') }}</span>
+<span class="badge" style="background:var(--primary);color:#fff;">
+{{ $lap->kandang->nama ?? '-' }}
+</span>
+</div>
+<div class="grid">
+<div><div class="v">{{ number_format($lap->hidup) }}</div><div class="l">Hidup</div></div>
+<div><div class="v text-danger">{{ number_format($lap->mati) }}</div><div class="l">Mati</div></div>
+<div><div class="v text-warning">{{ number_format($lap->afkir) }}</div><div class="l">Afkir</div></div>
+<div><div class="v text-success">{{ number_format($lap->sisa_ayam) }}</div><div class="l">Sisa</div></div>
+</div>
+<div class="grid mt-1">
+<div><div class="v">{{ number_format($lap->total_pakan, 0) }}</div><div class="l">Pakan (kg)</div></div>
+<div><div class="v">{{ number_format($lap->produksi_telur) }}</div><div class="l">Telur</div></div>
+<div><div class="v">{{ number_format($lap->telur_pecah) }}</div><div class="l">Pecah</div></div>
+<div><div class="v">{{ $lap->umur_minggu }}</div><div class="l">Minggu</div></div>
+</div>
+</div>
+@empty
+<div class="text-center text-muted small py-4">
+<i class="bi bi-inbox fs-3 d-block mb-2"></i>
+Belum ada laporan harian.
+</div>
+@endforelse
+<a href="{{ route('admin.laporan.index') }}" class="btn btn-sm btn-primary w-100">
+Lihat Semua Laporan
+</a>
+</div>
 </div>
 
-{{-- ✅ SCRIPT EFEK BELAH (3 lapis pengaman) --}}
 <script>
 (function () {
-    var drawer   = document.getElementById('laporanDrawer');
-    var mainArea = document.getElementById('mainArea');
-    var btnFloat = document.querySelector('.btn-float-laporan');
-    if (!drawer || !mainArea) return;
-
-    function buka()  { mainArea.classList.add('drawer-open');    document.body.classList.add('drawer-open'); }
-    function tutup() { mainArea.classList.remove('drawer-open'); document.body.classList.remove('drawer-open'); }
-
-    // 1) Event resmi Bootstrap
-    drawer.addEventListener('show.bs.offcanvas', buka);
-    drawer.addEventListener('hide.bs.offcanvas', tutup);
-    // 2) Event fallback (setelah animasi selesai)
-    drawer.addEventListener('shown.bs.offcanvas', buka);
-    drawer.addEventListener('hidden.bs.offcanvas', tutup);
-    // 3) Fallback klik tombol melayang & tombol close
-    if (btnFloat) btnFloat.addEventListener('click', function () {
-        setTimeout(function () {
-            drawer.classList.contains('show') ? buka() : tutup();
-        }, 50);
-    });
-    var btnClose = drawer.querySelector('[data-bs-dismiss="offcanvas"]');
-    if (btnClose) btnClose.addEventListener('click', tutup);
+var drawer   = document.getElementById('laporanDrawer');
+var mainArea = document.getElementById('mainArea');
+var btnFloat = document.querySelector('.btn-float-laporan');
+if (!drawer || !mainArea) return;
+function buka()  { mainArea.classList.add('drawer-open');    document.body.classList.add('drawer-open'); }
+function tutup() { mainArea.classList.remove('drawer-open'); document.body.classList.remove('drawer-open'); }
+drawer.addEventListener('show.bs.offcanvas', buka);
+drawer.addEventListener('hide.bs.offcanvas', tutup);
+drawer.addEventListener('shown.bs.offcanvas', buka);
+drawer.addEventListener('hidden.bs.offcanvas', tutup);
+if (btnFloat) btnFloat.addEventListener('click', function () {
+setTimeout(function () {
+drawer.classList.contains('show') ? buka() : tutup();
+}, 50);
+});
+var btnClose = drawer.querySelector('[data-bs-dismiss="offcanvas"]');
+if (btnClose) btnClose.addEventListener('click', tutup);
 })();
 </script>
 @endif
-
-@include('partials.cursor-animation')
 </body>
 </html>
 
@@ -6549,7 +6792,6 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
             ← Kembali ke beranda
         </a>
     </div>
-@include('partials.cursor-animation')
 </body>
 </html>
 
@@ -6558,45 +6800,126 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@yield('title', 'Laporan Harian')</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        body { background: #f7f2ea; }
-        .topbar { background: #2d1b16; }
-        .topbar .navbar-brand i { display: inline-block; animation: wobble 2.6s ease-in-out infinite; }
-        .btn-success { background: #6d4c41; border-color: #6d4c41; }
-        .btn-success:hover { background: #5d4037; border-color: #5d4037; }
-        @keyframes wobble { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); } }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>@yield('title', 'Laporan Harian')</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --primary: #6d4c41;
+  --primary-dark: #5d4037;
+  --primary-soft: #f4ede6;
+  --bg: #f7f2ea;
+  --text: #33261f;
+  --muted: #8a7a6e;
+  --border: #e6dacc;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; font-family: 'Inter', sans-serif; color: var(--text);
+  background: linear-gradient(180deg, #f7f2ea 0%, #efe6d9 100%);
+  min-height: 100vh;
+}
+
+/* ===== NAVBAR BARU ===== */
+.mp-navbar {
+  position: sticky; top: 0; z-index: 1000;
+  background: rgba(255,255,255,.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 4px 20px rgba(93,64,55,.07);
+  padding: 10px 0;
+}
+.mp-logo {
+  width: 42px; height: 42px; border-radius: 12px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #ffe9c9; display: flex; align-items: center; justify-content: center;
+  font-size: 20px; box-shadow: 0 4px 12px rgba(93,64,55,.3); flex-shrink: 0;
+}
+.mp-logo i { display: inline-block; animation: wobble 2.6s ease-in-out infinite; }
+.mp-brand-name { font-weight: 800; font-size: 16px; line-height: 1.1; }
+.mp-brand-sub { font-size: 10.5px; color: var(--muted); letter-spacing: .6px; text-transform: uppercase; }
+.mp-date-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--primary-soft); color: var(--primary-dark);
+  border-radius: 999px; padding: 7px 14px; font-size: 12px; font-weight: 600;
+}
+.mp-avatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: var(--primary-soft); color: var(--primary-dark);
+  font-weight: 700; display: flex; align-items: center; justify-content: center;
+  border: 2px solid #fff; box-shadow: 0 2px 8px rgba(93,64,55,.2); flex-shrink: 0;
+}
+.mp-user-name { font-size: 13px; font-weight: 700; line-height: 1.1; }
+.mp-user-role { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.mp-logout {
+  border: none; background: transparent; color: var(--muted);
+  border-radius: 999px; padding: 8px 14px; font-size: 13px; font-weight: 600; transition: .2s;
+}
+.mp-logout:hover { background: #f8d7da; color: #842029; }
+
+main.mp-main { padding: 28px 16px 60px; }
+.container-form { max-width: 980px; }
+
+@keyframes wobble { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); } }
+</style>
 </head>
 <body>
-    <nav class="topbar navbar navbar-dark px-3">
-        <span class="navbar-brand fw-bold"><i class="bi bi-egg-fried me-2"></i>BukanAyam</span>
-        <div class="d-flex align-items-center gap-2">
-            <span class="text-white small d-none d-md-inline">{{ auth()->user()->name ?? '' }}</span>
-            <form method="POST" action="{{ route('logout') }}">
-                @csrf
-                <button class="btn btn-sm btn-outline-light"><i class="bi bi-box-arrow-right me-1"></i>Keluar</button>
-            </form>
-        </div>
-    </nav>
 
-    <main class="container py-4" style="max-width: 760px;">
-        @if (session('success'))
-            <div class="alert alert-success border-0 shadow-sm"><i class="bi bi-check-circle-fill me-2"></i>{{ session('success') }}</div>
-        @endif
-        @if ($errors->any())
-            <div class="alert alert-danger border-0 shadow-sm">
-                <strong>Periksa kembali:</strong>
-                <ul class="mb-0 mt-2">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>
-            </div>
-        @endif
-        @yield('content')
-    </main>
-@include('partials.cursor-animation')
+{{-- ===== NAVBAR ===== --}}
+<nav class="mp-navbar">
+  <div class="container container-form d-flex align-items-center justify-content-between gap-2">
+    <div class="d-flex align-items-center gap-2">
+      <div class="mp-logo"><i class="bi bi-egg-fried"></i></div>
+      <div>
+        <div class="mp-brand-name">BukanAyam</div>
+        <div class="mp-brand-sub">Portal Man Power</div>
+      </div>
+    </div>
+
+    <div class="d-flex align-items-center gap-2">
+      <span class="mp-date-chip d-none d-sm-inline-flex">
+        <i class="bi bi-calendar3"></i> {{ now()->translatedFormat('l, j M Y') }}
+      </span>
+      <div class="d-flex align-items-center gap-2">
+        <div class="mp-avatar">{{ strtoupper(substr(auth()->user()->name ?? 'U', 0, 1)) }}</div>
+        <div class="d-none d-md-block">
+          <div class="mp-user-name">{{ auth()->user()->name ?? 'User' }}</div>
+          <div class="mp-user-role">Man Power</div>
+        </div>
+      </div>
+      <form method="POST" action="{{ route('logout') }}" class="mb-0">
+        @csrf
+        <button class="mp-logout" title="Keluar">
+          <i class="bi bi-box-arrow-right"></i><span class="d-none d-sm-inline"> Keluar</span>
+        </button>
+      </form>
+    </div>
+  </div>
+</nav>
+
+<main class="mp-main">
+  <div class="container container-form">
+    @if (session('success'))
+      <div class="alert alert-success border-0 shadow-sm">
+        <i class="bi bi-check-circle-fill me-2"></i>{{ session('success') }}
+      </div>
+    @endif
+    @if ($errors->any())
+      <div class="alert alert-danger border-0 shadow-sm">
+        <strong>Periksa kembali:</strong>
+        <ul class="mb-0 mt-2">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>
+      </div>
+    @endif
+
+    @yield('content')
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
 
@@ -6710,258 +7033,321 @@ $isAdmin = $user && ($user->role ?? '') === 'admin';
 @section('title', 'Input Laporan Harian')
 
 @section('content')
-<div class="card border-0 shadow-sm">
-    <div class="card-body p-4">
-        <h5 class="fw-bold mb-1">Laporan Harian</h5>
-        <p class="text-muted small mb-3">
-            Data populasi diambil <strong>otomatis dari input admin</strong>.
-            Anda cukup mengisi data harian (mati, afkir, pakan, telur).
-        </p>
+<style>
+.form-card {
+  background: #fff; border: 1px solid var(--border); border-radius: 20px;
+  box-shadow: 0 12px 40px rgba(93,64,55,.12); overflow: hidden;
+}
+.stepper-panel {
+  background: var(--primary-soft); padding: 28px 24px;
+  border-right: 1px solid var(--border);
+}
+.stepper-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+.stepper-brand .logo {
+  width: 38px; height: 38px; border-radius: 10px; background: #fff;
+  color: var(--primary); display: flex; align-items: center; justify-content: center;
+  font-size: 18px; box-shadow: 0 2px 8px rgba(93,64,55,.15);
+}
+.stepper-title { font-size: 17px; font-weight: 800; }
 
-        <!-- PANEL INFO POPULASI ADMIN -->
-        <div class="alert alert-info py-3 mb-4">
-            <div class="row text-center g-2">
-                <div class="col-3">
-                    <div class="small text-muted">Populasi (admin)</div>
-                    <div class="fs-4 fw-bold" id="info-hidup">-</div>
-                    <div class="small">ekor</div>
-                </div>
-                <div class="col-3">
-                    <div class="small text-muted">Perkiraan Sisa</div>
-                    <div class="fs-4 fw-bold text-success" id="info-sisa">-</div>
-                    <div class="small">ekor</div>
-                </div>
-                <div class="col-3">
-                    <div class="small text-muted">Usia</div>
-                    <div class="fs-4 fw-bold" id="info-usia">-</div>
-                    <div class="small">minggu</div>
-                </div>
-                <div class="col-3">
-                    <div class="small text-muted">Data Per Tanggal</div>
-                    <div class="fw-bold" id="info-tanggal">-</div>
-                    <div class="small">&nbsp;</div>
-                </div>
+.stepper { list-style: none; margin: 0; padding: 0; }
+.step {
+  display: flex; align-items: center; gap: 12px; padding: 9px 0;
+  color: var(--muted); font-size: 13.5px; font-weight: 600;
+  position: relative; cursor: pointer; transition: .2s;
+}
+.step .dot {
+  width: 27px; height: 27px; border-radius: 50%;
+  border: 2px solid #d8c9b8; background: #fff; color: var(--muted);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; flex-shrink: 0; transition: .2s;
+}
+.step:not(:last-child)::before {
+  content: ''; position: absolute; left: 13px; top: 40px; bottom: -4px;
+  width: 2px; background: #e0d2c0;
+}
+.step.active { color: var(--text); }
+.step.active .dot, .step.done .dot {
+  border-color: var(--primary); background: var(--primary); color: #fff;
+}
+
+.pop-info { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-top: 22px; }
+.pop-info .sec-title { margin-bottom: 10px; }
+
+.form-panel { padding: 28px 26px; }
+.sec-title {
+  font-size: 11px; font-weight: 700; letter-spacing: .8px;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 14px;
+}
+.form-section { padding-bottom: 22px; margin-bottom: 22px; border-bottom: 1px dashed var(--border); }
+.form-section:last-of-type { border-bottom: 0; margin-bottom: 0; padding-bottom: 0; }
+
+.form-panel .form-control, .form-panel .form-select {
+  background: #faf7f2; border: 1px solid var(--border); border-radius: 10px;
+}
+.form-panel .form-control:focus, .form-panel .form-select:focus {
+  background: #fff; border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(109,76,65,.12);
+}
+
+.btn-pill {
+  border: none; border-radius: 999px; padding: 11px 28px;
+  background: var(--primary); color: #fff; font-weight: 700; font-size: 14px;
+  box-shadow: 0 6px 16px rgba(93,64,55,.3); transition: .2s;
+}
+.btn-pill:hover { background: var(--primary-dark); transform: translateY(-1px); }
+
+@media (max-width: 767px) {
+  .stepper-panel { border-right: 0; border-bottom: 1px solid var(--border); padding: 20px; }
+  .stepper { display: flex; gap: 4px; justify-content: space-between; }
+  .step { flex-direction: column; gap: 6px; font-size: 10.5px; text-align: center; padding: 0; }
+  .step:not(:last-child)::before { display: none; }
+  .pop-info { margin-top: 16px; }
+  .form-panel { padding: 20px; }
+}
+</style>
+
+<div class="form-card">
+  <div class="row g-0">
+
+    {{-- ===== PANEL KIRI: STEPPER ===== --}}
+    <aside class="col-md-4 stepper-panel">
+      <div class="stepper-brand">
+        <div class="logo"><i class="bi bi-egg-fried"></i></div>
+        <div class="stepper-title">Laporan Harian</div>
+      </div>
+
+      <ol class="stepper" id="stepper">
+        <li class="step active" data-target="sec-1"><span class="dot">1</span> Identitas</li>
+        <li class="step" data-target="sec-2"><span class="dot">2</span> Populasi</li>
+        <li class="step" data-target="sec-3"><span class="dot">3</span> Pakan & Produksi</li>
+        <li class="step" data-target="sec-4"><span class="dot">4</span> Catatan</li>
+      </ol>
+
+      {{-- INFO POPULASI DARI ADMIN --}}
+      <div class="pop-info">
+        <div class="sec-title">Info Populasi (Admin)</div>
+        <div class="row text-center g-2">
+          <div class="col-3">
+            <div class="fw-bold" id="info-hidup">-</div>
+            <div class="small text-muted">Hidup</div>
+          </div>
+          <div class="col-3">
+            <div class="fw-bold text-success" id="info-sisa">-</div>
+            <div class="small text-muted">Sisa</div>
+          </div>
+          <div class="col-3">
+            <div class="fw-bold" id="info-usia">-</div>
+            <div class="small text-muted">Minggu</div>
+          </div>
+          <div class="col-3">
+            <div class="fw-bold small" id="info-tanggal">-</div>
+            <div class="small text-muted">Tgl Data</div>
+          </div>
+        </div>
+        <div class="small mt-2 mb-0" id="info-keterangan">
+          <i class="bi bi-info-circle me-1"></i> Silakan pilih kandang terlebih dahulu.
+        </div>
+      </div>
+    </aside>
+
+    {{-- ===== PANEL KANAN: FORM ===== --}}
+    <div class="col-md-8 form-panel">
+      <form action="{{ route('manpower.laporan.store') }}" method="POST">
+        @csrf
+
+        {{-- SECTION 1 --}}
+        <div class="form-section" id="sec-1">
+          <div class="sec-title">Identitas Laporan</div>
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-label small">Tanggal</label>
+              <input type="date" name="tanggal" class="form-control"
+                value="{{ old('tanggal', date('Y-m-d')) }}" required>
             </div>
-            <div class="small mt-2 mb-0" id="info-keterangan">
-                <i class="bi bi-info-circle me-1"></i> Silakan pilih kandang terlebih dahulu.
+            <div class="col-6">
+              <label class="form-label small">Kandang</label>
+              <select name="kandang_id" class="form-select" required>
+                <option value="">-- Pilih Kandang --</option>
+                @foreach ($kandangs as $kandang)
+                  <option value="{{ $kandang->id }}" @selected(old('kandang_id') == $kandang->id)>
+                    {{ $kandang->nama }}
+                  </option>
+                @endforeach
+              </select>
             </div>
+          </div>
         </div>
 
-        <form action="{{ route('manpower.laporan.store') }}" method="POST">
-            @csrf
-
-            {{-- ===== SECTION 1: IDENTITAS ===== --}}
-            <div class="border-bottom pb-3 mb-3">
-                <div class="small fw-bold text-muted mb-2">
-                    <i class="bi bi-1-circle-fill me-1"></i> Identitas Laporan
-                </div>
-                <div class="row g-3">
-                    <div class="col-6">
-                        <label class="form-label">Tanggal</label>
-                        <input type="date" name="tanggal" class="form-control"
-                            value="{{ old('tanggal', date('Y-m-d')) }}" required>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label">Kandang</label>
-                        <select name="kandang_id" class="form-select" required>
-                            <option value="">-- Pilih Kandang --</option>
-                            @foreach ($kandangs as $kandang)
-                                <option value="{{ $kandang->id }}" @selected(old('kandang_id') == $kandang->id)>
-                                    {{ $kandang->nama }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                </div>
+        {{-- SECTION 2 --}}
+        <div class="form-section" id="sec-2">
+          <div class="sec-title">Data Populasi <span class="badge bg-secondary ms-1">Otomatis</span></div>
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-label small">Populasi Awal (ekor)</label>
+              <input type="number" name="hidup" id="input-hidup" class="form-control"
+                value="{{ old('hidup', 0) }}" min="0" readonly required>
+              <div class="form-text" id="hint-hidup">Diambil otomatis dari data populasi admin.</div>
             </div>
-
-            {{-- ===== SECTION 2: POPULASI ===== --}}
-            <div class="border-bottom pb-3 mb-3">
-                <div class="small fw-bold text-muted mb-2">
-                    <i class="bi bi-2-circle-fill me-1"></i> Data Populasi
-                    <span class="badge bg-secondary ms-1">Dari data admin</span>
-                </div>
-                <div class="row g-3">
-                    <div class="col-6">
-                        <label class="form-label">Populasi Awal (ekor)</label>
-                        <input type="number" name="hidup" id="input-hidup" class="form-control bg-light"
-                            value="{{ old('hidup', 0) }}" min="0" readonly required>
-                        <div class="form-text" id="hint-hidup">
-                            Diambil otomatis dari data populasi admin.
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label">
-                            Umur Ayam (minggu)
-                            <span class="badge bg-secondary ms-1">Otomatis</span>
-                        </label>
-                        <input type="number" name="umur_minggu" id="input-umur" class="form-control bg-light"
-                            value="{{ old('umur_minggu', 0) }}" min="0" readonly required>
-                        <div class="form-text" id="hint-umur">
-                            Dihitung otomatis dari usia populasi admin.
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label">Mati (ekor)</label>
-                        <input type="number" name="mati" class="form-control"
-                            value="{{ old('mati', 0) }}" min="0" required>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label">Afkir (ekor)</label>
-                        <input type="number" name="afkir" class="form-control"
-                            value="{{ old('afkir', 0) }}" min="0" required>
-                        <div class="form-text text-muted">Hanya dicatat, tidak mengurangi sisa.</div>
-                    </div>
-                </div>
+            <div class="col-6">
+              <label class="form-label small">Umur Ayam (minggu)</label>
+              <input type="number" name="umur_minggu" id="input-umur" class="form-control"
+                value="{{ old('umur_minggu', 0) }}" min="0" readonly required>
+              <div class="form-text" id="hint-umur">Dihitung otomatis dari usia populasi admin.</div>
             </div>
-
-            {{-- ===== SECTION 3: PAKAN & PRODUKSI ===== --}}
-            <div class="border-bottom pb-3 mb-3">
-                <div class="small fw-bold text-muted mb-2">
-                    <i class="bi bi-3-circle-fill me-1"></i> Pakan & Produksi Telur
-                </div>
-                <div class="row g-3">
-                    <div class="col-12">
-                        <label class="form-label">Total Pakan (kg)</label>
-                        <input type="number" step="0.01" name="total_pakan" class="form-control"
-                            value="{{ old('total_pakan') }}" min="0" required>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label">Telur Bagus (butir)</label>
-                        <input type="number" name="produksi_telur" id="telur-bagus" class="form-control"
-                            value="{{ old('produksi_telur', 0) }}" min="0" required>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label">Telur Pecah / Reject (butir)</label>
-                        <input type="number" name="telur_pecah" id="telur-pecah" class="form-control"
-                            value="{{ old('telur_pecah', 0) }}" min="0" required>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label">
-                            Total Produksi (butir)
-                            <span class="badge bg-secondary ms-1">Otomatis</span>
-                        </label>
-                        <input type="text" id="total-produksi" class="form-control bg-light fw-bold text-success"
-                            readonly value="0 butir">
-                        <div class="form-text">= Telur Bagus + Telur Pecah (otomatis)</div>
-                    </div>
-                </div>
+            <div class="col-6">
+              <label class="form-label small">Mati (ekor)</label>
+              <input type="number" name="mati" class="form-control"
+                value="{{ old('mati', 0) }}" min="0" required>
             </div>
-
-            {{-- ===== SECTION 4: CATATAN ===== --}}
-            <div class="pb-3 mb-3">
-                <div class="small fw-bold text-muted mb-2">
-                    <i class="bi bi-4-circle-fill me-1"></i> Catatan Tambahan (opsional)
-                </div>
-                <input type="text" name="column_10" class="form-control"
-                    value="{{ old('column_10') }}"
-                    placeholder="Misal: cuaca mendung, ada gangguan predator, dll.">
+            <div class="col-6">
+              <label class="form-label small">Afkir (ekor)</label>
+              <input type="number" name="afkir" class="form-control"
+                value="{{ old('afkir', 0) }}" min="0" required>
+              <div class="form-text text-muted">Hanya dicatat, tidak mengurangi sisa.</div>
             </div>
+          </div>
+        </div>
 
-            <div class="d-grid mt-4">
-                <button class="btn btn-success">
-                    <i class="bi bi-save me-1"></i> Simpan Laporan
-                </button>
+        {{-- SECTION 3 --}}
+        <div class="form-section" id="sec-3">
+          <div class="sec-title">Pakan & Produksi Telur</div>
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label small">Total Pakan (kg)</label>
+              <input type="number" step="0.01" name="total_pakan" class="form-control"
+                value="{{ old('total_pakan') }}" min="0" required>
             </div>
-        </form>
+            <div class="col-6">
+              <label class="form-label small">Telur Bagus (butir)</label>
+              <input type="number" name="produksi_telur" id="telur-bagus" class="form-control"
+                value="{{ old('produksi_telur', 0) }}" min="0" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label small">Telur Pecah / Reject (butir)</label>
+              <input type="number" name="telur_pecah" id="telur-pecah" class="form-control"
+                value="{{ old('telur_pecah', 0) }}" min="0" required>
+            </div>
+            <div class="col-12">
+              <label class="form-label small">Total Produksi (butir) — otomatis</label>
+              <input type="text" id="total-produksi" class="form-control fw-bold text-success"
+                readonly value="0 butir">
+            </div>
+          </div>
+        </div>
+
+        {{-- SECTION 4 --}}
+        <div class="form-section" id="sec-4">
+          <div class="sec-title">Catatan Tambahan (opsional)</div>
+          <input type="text" name="column_10" class="form-control"
+            value="{{ old('column_10') }}"
+            placeholder="Misal: cuaca mendung, ada gangguan predator, dll.">
+        </div>
+
+        <div class="d-flex justify-content-end mt-4">
+          <button type="submit" class="btn-pill">
+            Simpan Laporan <i class="bi bi-arrow-right ms-1"></i>
+          </button>
+        </div>
+      </form>
     </div>
+
+  </div>
 </div>
 
 <script>
+/* ===== LOGIKA OTOMATIS POPULASI (sama seperti sebelumnya) ===== */
 const POPULASI = @js($populasiTerakhir);
 const TODAY    = @js($today);
 
-function angka(el) {
-    return parseInt(el.value || 0, 10) || 0;
-}
-
+function angka(el) { return parseInt(el.value || 0, 10) || 0; }
 function hariAntara(t1, t2) {
-    if (!t1 || !t2) return 0;
-    return Math.max(0, Math.round((new Date(t2) - new Date(t1)) / 86400000));
+  if (!t1 || !t2) return 0;
+  return Math.max(0, Math.round((new Date(t2) - new Date(t1)) / 86400000));
 }
-
 function updateInfo() {
-    const kandangId  = document.querySelector('[name="kandang_id"]').value;
-    const data       = POPULASI[kandangId] || null;
-    const inputHidup = document.getElementById('input-hidup');
-    const inputUmur  = document.getElementById('input-umur');
-    const hintHidup  = document.getElementById('hint-hidup');
-    const hintUmur   = document.getElementById('hint-umur');
-    const ket        = document.getElementById('info-keterangan');
+  const kandangId  = document.querySelector('[name="kandang_id"]').value;
+  const data       = POPULASI[kandangId] || null;
+  const inputHidup = document.getElementById('input-hidup');
+  const inputUmur  = document.getElementById('input-umur');
+  const hintHidup  = document.getElementById('hint-hidup');
+  const hintUmur   = document.getElementById('hint-umur');
+  const ket        = document.getElementById('info-keterangan');
 
-    if (data) {
-        // ✅ Populasi awal = sisa dari data admin
-        inputHidup.value    = data.sisa;
-        inputHidup.readOnly = true;
-        inputHidup.classList.add('bg-light', 'text-muted');
-        hintHidup.textContent = 'Otomatis dari data populasi admin (sisa: ' + data.sisa.toLocaleString('id-ID') + ' ekor).';
-
-        // ✅ Usia otomatis (minggu) dari data admin
-        const hariLalu   = hariAntara(data.tanggal_dasar, TODAY);
-        const usiaHari   = (data.usia_dasar || 0) + hariLalu;
-        const usiaMinggu = Math.floor(usiaHari / 7);
-        inputUmur.value  = usiaMinggu;
-        inputUmur.readOnly = true;
-        inputUmur.classList.add('bg-light', 'text-muted');
-        hintUmur.textContent = 'Usia dasar ' + (data.usia_dasar || 0) + ' hari + ' + hariLalu + ' hari = ' + usiaHari + ' hari (' + usiaMinggu + ' minggu).';
-
-        ket.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i>' +
-            'Data populasi dari admin berhasil dimuat. Populasi & usia bersifat <strong>read-only</strong>.';
-
-        // Info panel
-        document.getElementById('info-hidup').textContent   = data.sisa.toLocaleString('id-ID');
-        document.getElementById('info-usia').textContent     = usiaMinggu;
-        document.getElementById('info-tanggal').textContent  = data.tanggal;
-
+  if (data) {
+    inputHidup.value = data.sisa; inputHidup.readOnly = true;
+    hintHidup.textContent = 'Otomatis dari data populasi admin (sisa: ' + data.sisa.toLocaleString('id-ID') + ' ekor).';
+    const hariLalu   = hariAntara(data.tanggal_dasar, TODAY);
+    const usiaHari   = (data.usia_dasar || 0) + hariLalu;
+    const usiaMinggu = Math.floor(usiaHari / 7);
+    inputUmur.value = usiaMinggu; inputUmur.readOnly = true;
+    hintUmur.textContent = 'Usia dasar ' + (data.usia_dasar || 0) + ' hari + ' + hariLalu + ' hari = ' + usiaHari + ' hari.';
+    ket.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i>Data populasi dimuat. Populasi & usia read-only.';
+    document.getElementById('info-hidup').textContent  = data.sisa.toLocaleString('id-ID');
+    document.getElementById('info-sisa').textContent   = data.sisa.toLocaleString('id-ID');
+    document.getElementById('info-usia').textContent   = usiaMinggu;
+    document.getElementById('info-tanggal').textContent = data.tanggal;
+  } else {
+    inputHidup.readOnly = false; inputUmur.readOnly = false; inputUmur.value = 0;
+    if (kandangId) {
+      hintHidup.textContent = 'Admin belum input populasi untuk kandang ini — isi manual.';
+      hintUmur.textContent  = 'Admin belum input populasi — isi umur (minggu) manual.';
+      ket.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>Belum ada data populasi dari admin.';
     } else {
-        // Belum ada data admin → input manual
-        inputHidup.readOnly = false;
-        inputHidup.classList.remove('bg-light', 'text-muted');
-        inputUmur.readOnly  = false;
-        inputUmur.classList.remove('bg-light', 'text-muted');
-        inputUmur.value = 0;
-
-        if (kandangId) {
-            hintHidup.textContent = 'Admin belum input populasi untuk kandang ini — isi manual.';
-            hintUmur.textContent  = 'Admin belum input populasi — isi umur (minggu) manual.';
-            ket.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>' +
-                'Belum ada data populasi dari admin untuk kandang ini. Hubungi admin atau isi manual.';
-        } else {
-            hintHidup.textContent = 'Diambil otomatis dari data populasi admin.';
-            hintUmur.textContent  = 'Dihitung otomatis dari usia populasi admin.';
-            ket.innerHTML = '<i class="bi bi-info-circle me-1"></i> Silakan pilih kandang terlebih dahulu.';
-        }
-
-        document.getElementById('info-hidup').textContent   = '-';
-        document.getElementById('info-usia').textContent     = '-';
-        document.getElementById('info-tanggal').textContent  = '-';
+      hintHidup.textContent = 'Diambil otomatis dari data populasi admin.';
+      hintUmur.textContent  = 'Dihitung otomatis dari usia populasi admin.';
+      ket.innerHTML = '<i class="bi bi-info-circle me-1"></i> Silakan pilih kandang terlebih dahulu.';
     }
-
-    // Hitung perkiraan sisa
-    const hidup = angka(inputHidup);
-    const mati  = angka(document.querySelector('[name="mati"]'));
-    document.getElementById('info-sisa').textContent =
-        kandangId ? Math.max(0, hidup - mati).toLocaleString('id-ID') : '-';
+    document.getElementById('info-hidup').textContent  = '-';
+    document.getElementById('info-sisa').textContent   = '-';
+    document.getElementById('info-usia').textContent   = '-';
+    document.getElementById('info-tanggal').textContent = '-';
+  }
+  const hidup = angka(inputHidup);
+  const mati  = angka(document.querySelector('[name="mati"]'));
+  document.getElementById('info-sisa').textContent =
+    kandangId ? Math.max(0, hidup - mati).toLocaleString('id-ID') : '-';
 }
-
 function hitungTotalProduksi() {
-    const bagus = angka(document.getElementById('telur-bagus'));
-    const pecah = angka(document.getElementById('telur-pecah'));
-    document.getElementById('total-produksi').value =
-        (bagus + pecah).toLocaleString('id-ID') + ' butir';
+  const bagus = angka(document.getElementById('telur-bagus'));
+  const pecah = angka(document.getElementById('telur-pecah'));
+  document.getElementById('total-produksi').value =
+    (bagus + pecah).toLocaleString('id-ID') + ' butir';
 }
-
-// Event listeners
 document.querySelector('[name="kandang_id"]').addEventListener('change', updateInfo);
 document.getElementById('input-hidup').addEventListener('input', updateInfo);
 document.querySelector('[name="mati"]').addEventListener('input', updateInfo);
 document.querySelector('[name="afkir"]').addEventListener('input', updateInfo);
 document.getElementById('telur-bagus').addEventListener('input', hitungTotalProduksi);
 document.getElementById('telur-pecah').addEventListener('input', hitungTotalProduksi);
-
-// Init
 updateInfo();
 hitungTotalProduksi();
+
+/* ===== STEPPER: klik = scroll, aktif mengikuti scroll ===== */
+(function () {
+  const steps = document.querySelectorAll('#stepper .step');
+  const secs  = Array.from(steps).map(s => document.getElementById(s.dataset.target));
+
+  steps.forEach((s, i) => {
+    s.addEventListener('click', () => {
+      if (secs[i]) secs[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  });
+
+  function onScroll() {
+    let current = 0;
+    secs.forEach((sec, i) => {
+      if (sec && sec.getBoundingClientRect().top < window.innerHeight * 0.45) current = i;
+    });
+    steps.forEach((s, i) => {
+      s.classList.toggle('active', i === current);
+      s.classList.toggle('done', i < current);
+      s.querySelector('.dot').textContent = i < current ? '✓' : (i + 1);
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
 </script>
 @endsection
 
@@ -7316,170 +7702,6 @@ hitungTotalProduksi();
     </div>
 </div>
 @endsection
-
-
-===== C:\xampp\htdocs\peternakan_ayam\resources\views\partials\cursor-animation.blade.php =====
-{{-- ===== ANIMASI KURSOR AYAM + JEJAK TELUR ===== --}}
-<style>
-@media (pointer: fine) {
-  #cursorChicken, .cursor-egg {
-    position: fixed;
-    top: 0; left: 0;
-    pointer-events: none;
-    z-index: 99999;
-  }
-  #cursorChicken {
-    width: 46px; height: 46px;
-    transform: translate(-50%, -50%);
-    opacity: 0;
-    transition: opacity .25s ease, transform .25s ease;
-    filter: drop-shadow(0 4px 6px rgba(93,64,55,.25));
-  }
-  #cursorChicken.on { opacity: 1; }
-  #cursorChicken.is-hover { transform: translate(-50%, -50%) scale(1.25); }
-  #cursorChicken svg { width: 100%; height: 100%; display: block; }
-
-  #cursorChicken .wing {
-    transform-origin: 50% 20%;
-    animation: wingFlap .45s ease-in-out infinite;
-  }
-  @keyframes wingFlap {
-    0%, 100% { transform: rotate(-8deg); }
-    50%      { transform: rotate(18deg); }
-  }
-
-  #cursorChicken .head {
-    transform-origin: 50% 90%;
-    animation: headBob .6s ease-in-out infinite;
-  }
-  @keyframes headBob {
-    0%, 100% { transform: rotate(-3deg) translateY(0); }
-    50%      { transform: rotate(3deg) translateY(-1px); }
-  }
-
-  .cursor-egg {
-    width: 10px; height: 13px;
-    background: linear-gradient(180deg, #fff8ee, #e8d5bd);
-    border: 1px solid rgba(93, 64, 55, .25);
-    border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
-    will-change: transform, opacity;
-  }
-}
-</style>
-
-<div id="cursorChicken">
-  <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-    <path d="M10 38 Q4 30 8 22 Q10 30 14 34 Q8 28 12 20 Q14 28 18 34 Q14 26 18 18 Q20 28 22 36 Z" fill="#5d4037"/>
-    <line x1="28" y1="50" x2="26" y2="58" stroke="#f4b400" stroke-width="2.5" stroke-linecap="round"/>
-    <line x1="36" y1="50" x2="38" y2="58" stroke="#f4b400" stroke-width="2.5" stroke-linecap="round"/>
-    <path d="M22 58 L26 58 L30 58 M26 58 L26 61" stroke="#f4b400" stroke-width="2" stroke-linecap="round" fill="none"/>
-    <path d="M34 58 L38 58 L42 58 M38 58 L38 61" stroke="#f4b400" stroke-width="2" stroke-linecap="round" fill="none"/>
-    <ellipse cx="32" cy="40" rx="18" ry="14" fill="#fff8ee"/>
-    <ellipse cx="32" cy="42" rx="16" ry="11" fill="#fff"/>
-    <g class="wing">
-      <path d="M22 38 Q14 40 16 48 Q22 44 28 44 Q24 42 22 38 Z" fill="#e8d5bd"/>
-    </g>
-    <g class="head">
-      <path d="M40 14 Q42 8 44 13 Q46 7 48 13 Q50 9 51 15 Q48 17 40 16 Z" fill="#d93636"/>
-      <circle cx="46" cy="24" r="11" fill="#fff8ee"/>
-      <circle cx="46" cy="25" r="9" fill="#fff"/>
-      <circle cx="42" cy="27" r="2" fill="#f4b8b8" opacity=".7"/>
-      <circle cx="49" cy="22" r="2.2" fill="#2d1b16"/>
-      <circle cx="49.6" cy="21.3" r=".7" fill="#fff"/>
-      <path d="M55 24 L62 26 L55 28 Z" fill="#f4b400"/>
-      <path d="M55 26 L60 26" stroke="#c79000" stroke-width=".5"/>
-      <path d="M50 29 Q52 33 50 33 Q48 33 50 29 Z" fill="#d93636"/>
-    </g>
-  </svg>
-</div>
-
-<script>
-(function () {
-  if (!window.matchMedia('(pointer: fine)').matches) return;
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-  var chicken = document.getElementById('cursorChicken');
-  if (!chicken) return;
-
-  var mx = -100, my = -100, rx = -100, ry = -100;
-  var lastX = -100, lastY = -100;
-  var aktif = false;
-  var angle = 0;
-
-  window.addEventListener('mousemove', function (e) {
-    mx = e.clientX; my = e.clientY;
-    if (!aktif) { aktif = true; rx = mx; ry = my; chicken.classList.add('on'); }
-
-    var dx = mx - lastX;
-    var dy = my - lastY;
-    if (Math.hypot(dx, dy) > 2) {
-      var target = Math.atan2(dy, dx) * 180 / Math.PI;
-      target = Math.max(-25, Math.min(25, target));
-      angle += (target - angle) * 0.2;
-      lastX = mx; lastY = my;
-    }
-
-    spawnTrail(mx, my);
-  }, { passive: true });
-
-  document.documentElement.addEventListener('mouseleave', function () {
-    aktif = false;
-    chicken.classList.remove('on');
-  });
-
-  (function loop() {
-    if (aktif) {
-      rx += (mx - rx) * 0.18;
-      ry += (my - ry) * 0.18;
-      chicken.style.left = rx + 'px';
-      chicken.style.top  = ry + 'px';
-      chicken.style.transform = 'translate(-50%, -50%) rotate(' + angle.toFixed(1) + 'deg)';
-    }
-    requestAnimationFrame(loop);
-  })();
-
-  document.addEventListener('mouseover', function (e) {
-    var hit = e.target.closest && e.target.closest('a, button, select, input, textarea, [role="button"]');
-    chicken.classList.toggle('is-hover', !!hit);
-  });
-
-  var trailX = 0, trailY = 0;
-  function spawnTrail(x, y) {
-    if (Math.hypot(x - trailX, y - trailY) < 28) return;
-    trailX = x; trailY = y;
-
-    var el = document.createElement('div');
-    el.className = 'cursor-egg';
-    el.style.left = x + 'px';
-    el.style.top  = y + 'px';
-    document.body.appendChild(el);
-
-    el.animate([
-      { transform: 'translate(-50%, -50%) scale(1) rotate(-6deg)', opacity: 0.9 },
-      { transform: 'translate(-50%, -20%) scale(0.2) rotate(14deg)', opacity: 0 }
-    ], { duration: 650, easing: 'ease-out' }).onfinish = function () { el.remove(); };
-  }
-
-  window.addEventListener('click', function (e) {
-    for (var i = 0; i < 8; i++) {
-      var p = document.createElement('div');
-      p.className = 'cursor-egg';
-      p.style.left = e.clientX + 'px';
-      p.style.top  = e.clientY + 'px';
-      document.body.appendChild(p);
-
-      var ang = (Math.PI * 2 / 8) * i + Math.random() * 0.5;
-      var d   = 26 + Math.random() * 26;
-
-      p.animate([
-        { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
-        { transform: 'translate(calc(-50% + ' + (Math.cos(ang) * d) + 'px), calc(-50% + ' + (Math.sin(ang) * d) + 'px)) scale(0.25)', opacity: 0 }
-      ], { duration: 520, easing: 'cubic-bezier(.15,.6,.4,1)' })
-      .onfinish = (function (node) { return function () { node.remove(); }; })(p);
-    }
-  });
-})();
-</script>
 
 
 ===== C:\xampp\htdocs\peternakan_ayam\resources\views\pemberian_pakan\create.blade.php =====

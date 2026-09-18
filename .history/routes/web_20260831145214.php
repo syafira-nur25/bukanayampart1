@@ -14,12 +14,10 @@ use App\Http\Controllers\ArusKasController;
 use App\Http\Controllers\GudangTelurController;
 use App\Http\Controllers\StokTelurController;
 
-// LANDING PAGE (publik)
 Route::get('/', function () {
     return view('landing');
 })->name('landing');
 
-/* ========== KHUSUS ADMIN ========== */
 Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
