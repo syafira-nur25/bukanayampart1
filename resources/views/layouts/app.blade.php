@@ -11,124 +11,45 @@
 :root {
 --primary: #6d4c41;
 --primary-dark: #5d4037;
---primary-soft: #f3ede6;
---sidebar-bg: #fdfcfa;
+--sidebar: #2d1b16;
+--sidebar-hover: #4e342e;
 --background: #f7f2ea;
 --card: #ffffff;
 --text: #33261f;
 --muted: #8a7a6e;
 --border: #e6dacc;
 --drawer-width: 380px;
---sidebar-width: 264px;
---sidebar-slim: 84px;
---sidebar-gap: 16px;
+--sidebar-width: 260px;
 }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background); color: var(--text); }
 
-/* ===== SIDEBAR ===== */
-.sidebar {
-position: fixed; left: var(--sidebar-gap); top: var(--sidebar-gap); bottom: var(--sidebar-gap);
-width: var(--sidebar-width);
-background: var(--sidebar-bg);
-border: 1px solid var(--border);
-border-radius: 20px;
-z-index: 1000;
-display: flex; flex-direction: column;
-overflow: hidden;
-transition: width .3s ease, transform .3s ease;
-box-shadow: 0 10px 30px rgba(93, 64, 55, .06);
-}
-.brand { display: flex; align-items: center; gap: 12px; padding: 20px 20px 12px; }
-.brand-icon {
-width: 42px; height: 42px; border-radius: 50%;
-background: var(--primary); color: #fff;
-display: flex; align-items: center; justify-content: center;
-font-size: 18px; flex-shrink: 0;
-}
+.sidebar { width: var(--sidebar-width); height: 100vh; position: fixed; left: 0; top: 0; background: var(--sidebar); color: white; z-index: 1000; transition: transform .3s ease; overflow-y: auto; }
+/* ✅ BRAND: HANYA LOGO, TANPA TULISAN */
+.brand { height: 75px; display: flex; align-items: center; justify-content: center; padding: 0 24px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.brand-logo { height: 46px; width: auto; object-fit: contain; display: block; }
+.brand-icon { width: 42px; height: 42px; display: none; align-items: center; justify-content: center; background: var(--primary); border-radius: 12px; font-size: 22px; flex-shrink: 0; }
 .brand-icon i { display: inline-block; animation: wobble 2.6s ease-in-out infinite; }
-.brand-title { font-size: 17px; font-weight: 800; color: var(--text); line-height: 1.1; }
-.brand-subtitle { font-size: 11px; color: var(--muted); }
+.sidebar-content { padding: 20px 14px; }
+.menu-title { font-size: 11px; font-weight: 700; color: #a1887f; text-transform: uppercase; padding: 15px 12px 8px; letter-spacing: 0.8px; }
+.sidebar a { color: #e5d8cf; text-decoration: none; display: flex; align-items: center; gap: 12px; padding: 11px 13px; border-radius: 9px; margin-bottom: 3px; font-size: 14px; transition: 0.2s; }
+.sidebar a:hover { background: var(--sidebar-hover); color: white; }
+.sidebar a.active { background: var(--primary); color: white; }
+.sidebar a i { font-size: 17px; }
+.sidebar-footer { padding: 14px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 20px; }
 
-/* Search */
-.sidebar-search { padding: 0 16px 10px; }
-.search-box {
-display: flex; align-items: center; gap: 8px;
-background: #f1ece5; border-radius: 999px; padding: 9px 14px;
-}
-.search-box i { color: var(--muted); font-size: 14px; }
-.search-box input { border: 0; background: transparent; outline: none; width: 100%; font-size: 13px; color: var(--text); }
-
-/* Menu */
-.sidebar-content { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 6px 14px 14px; }
-.sidebar-content::-webkit-scrollbar { width: 4px; }
-.sidebar-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-.menu-title {
-font-size: 10.5px; font-weight: 700; color: var(--muted);
-text-transform: uppercase; letter-spacing: .8px;
-padding: 12px 12px 6px;
-}
-.sidebar-content a.menu-link,
-.sidebar-content button.menu-parent {
-display: flex; align-items: center; gap: 12px;
-padding: 11px 12px; margin-bottom: 2px;
-border-radius: 12px; position: relative;
-color: #6b6259; font-size: 14px; font-weight: 500; text-decoration: none;
-transition: background .15s ease, color .15s ease;
-}
-.sidebar-content a.menu-link i,
-.sidebar-content button.menu-parent i:first-child { font-size: 17px; width: 22px; text-align: center; flex-shrink: 0; }
-.sidebar-content a.menu-link:hover,
-.sidebar-content button.menu-parent:hover { background: var(--primary-soft); color: var(--primary-dark); }
-.sidebar-content a.menu-link.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
-.sidebar-content a.menu-link.active::before {
-content: ''; position: absolute; left: -14px; top: 9px; bottom: 9px;
-width: 4px; border-radius: 4px; background: var(--primary);
-}
-.menu-label { white-space: nowrap; }
-.menu-badge {
-margin-left: auto; background: #ece5dc; color: #6b6259;
-border-radius: 999px; font-size: 10.5px; font-weight: 700; padding: 2px 8px;
-}
-.menu-badge.accent { background: var(--primary); color: #fff; }
-
-/* ===== DROPDOWN MENU ===== */
-button.menu-parent { width: 100%; border: 0; background: transparent; font-family: inherit; cursor: pointer; }
-.menu-parent .arrow { margin-left: auto; font-size: 12px !important; width: auto !important; color: var(--muted); transition: transform .25s ease; }
-.menu-parent[aria-expanded="true"] .arrow { transform: rotate(180deg); }
-.menu-group.open > .menu-parent { color: var(--primary); font-weight: 600; }
-.menu-sub { margin: 2px 0 6px 27px; border-left: 1px solid var(--border); padding-left: 10px; }
-.menu-sub a.menu-link { padding: 8px 10px; font-size: 13px; }
-.menu-sub a.menu-link i { font-size: 14px !important; }
-.menu-sub a.menu-link.active::before { display: none; }
-
-/* Footer sidebar */
-.sidebar-footer { padding: 12px 14px; border-top: 1px solid var(--border); }
-.btn-logout {
-display: flex; align-items: center; gap: 12px; width: 100%;
-border: 0; background: transparent; color: #6b6259;
-padding: 10px 12px; border-radius: 12px; font-size: 14px; cursor: pointer;
-}
-.btn-logout i { font-size: 16px; width: 22px; text-align: center; }
-.btn-logout:hover { background: #f8d7da; color: #842029; }
-
-/* ===== OVERLAY (mobile) ===== */
 .sidebar-overlay { position: fixed; inset: 0; background: rgba(20,10,5,.5); z-index: 999; opacity: 0; visibility: hidden; transition: opacity .25s ease, visibility .25s ease; }
 
-/* ===== MAIN ===== */
-.main {
-margin-left: calc(var(--sidebar-width) + var(--sidebar-gap) * 2);
-width: calc(100% - (var(--sidebar-width) + var(--sidebar-gap) * 2));
-min-height: 100vh;
-transition: margin-left .3s ease, width .35s ease;
-}
-.main.drawer-open { width: calc(100% - (var(--sidebar-width) + var(--sidebar-gap) * 2) - var(--drawer-width)); }
+.main { margin-left: var(--sidebar-width); min-height: 100vh; transition: margin-left .3s ease, width .35s ease; width: calc(100% - var(--sidebar-width)); }
+.main.drawer-open { width: calc(100% - var(--sidebar-width) - var(--drawer-width)); }
 .topbar { height: 75px; background: white; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 30px; gap: 12px; position: sticky; top: 0; z-index: 900; }
 .topbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .page-title { font-size: 18px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .page-subtitle { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .profile { display: flex; align-items: center; gap: 10px; }
 .profile-avatar { width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; background: #e8d5bd; color: var(--primary-dark); border-radius: 50%; font-weight: 700; flex-shrink: 0; }
+.btn-logout { background: transparent; border: 1px solid var(--border); color: #ffffff; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; transition: 0.2s; }
+.btn-logout:hover { background: #f8d7da; color: #842029; border-color: #f8d7da; }
 .content { padding: 30px; }
 
 .btn-toggle-sidebar {
@@ -139,7 +60,6 @@ font-size: 18px; color: var(--text); cursor: pointer; transition: .2s;
 }
 .btn-toggle-sidebar:hover { background: var(--background); }
 
-/* ===== CARDS & PANELS ===== */
 .stat-card { background: white; border: 1px solid var(--border); border-radius: 16px; padding: 20px; height: 100%; transition: 0.2s; }
 .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.06); }
 .stat-top { display: flex; justify-content: space-between; align-items: center; }
@@ -165,7 +85,6 @@ font-size: 18px; color: var(--text); cursor: pointer; transition: .2s;
 .badge.bg-success { background: var(--primary) !important; }
 @keyframes wobble { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); } }
 
-/* ===== FLOATING BUTTON & DRAWER ===== */
 .btn-float-laporan {
 position: fixed; right: 22px; bottom: 22px; z-index: 1040;
 width: 56px; height: 56px; border-radius: 50%;
@@ -192,37 +111,19 @@ border-left: 1px solid var(--border);
 .laporan-item .grid .v { font-weight: 700; font-size: 13px; }
 .laporan-item .grid .l { font-size: 10px; color: var(--muted); }
 
-/* ===== DESKTOP: collapse jadi slim (ikon saja) ===== */
 @media (min-width: 992px) {
 .btn-toggle-sidebar { display: flex; }
-body.sidebar-collapsed .sidebar { width: var(--sidebar-slim); }
-body.sidebar-collapsed .brand { justify-content: center; padding: 20px 0 12px; }
-body.sidebar-collapsed .brand-text,
-body.sidebar-collapsed .sidebar-search,
-body.sidebar-collapsed .menu-title,
-body.sidebar-collapsed .menu-label,
-body.sidebar-collapsed .menu-badge,
-body.sidebar-collapsed .menu-parent .arrow,
-body.sidebar-collapsed .menu-sub { display: none; }
-body.sidebar-collapsed .sidebar-content a.menu-link,
-body.sidebar-collapsed .sidebar-content button.menu-parent { justify-content: center; padding: 12px 0; }
-body.sidebar-collapsed .btn-logout { justify-content: center; }
-body.sidebar-collapsed .main {
-margin-left: calc(var(--sidebar-slim) + var(--sidebar-gap) * 2);
-width: calc(100% - (var(--sidebar-slim) + var(--sidebar-gap) * 2));
-}
-body.sidebar-collapsed .main.drawer-open {
-width: calc(100% - (var(--sidebar-slim) + var(--sidebar-gap) * 2) - var(--drawer-width));
-}
+body.sidebar-collapsed .sidebar { transform: translateX(-100%); }
+body.sidebar-collapsed .main { margin-left: 0; width: 100%; }
+body.sidebar-collapsed .main.drawer-open { width: calc(100% - var(--drawer-width)); }
 }
 
-/* ===== MOBILE / TABLET: off-canvas ===== */
 @media (max-width: 991px) {
 .btn-toggle-sidebar { display: flex; }
-.sidebar { transform: translateX(calc(-100% - var(--sidebar-gap) * 2)); }
+.sidebar { transform: translateX(-100%); }
 body.sidebar-open .sidebar { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,.35); }
 body.sidebar-open .sidebar-overlay { opacity: 1; visibility: visible; }
-.main { margin-left: 0 !important; width: 100% !important; }
+.main { margin-left: 0; width: 100% !important; }
 .main.drawer-open { width: 100% !important; }
 body.drawer-open .btn-float-laporan { right: 22px; }
 .content { padding: 16px; }
@@ -230,7 +131,9 @@ body.drawer-open .btn-float-laporan { right: 22px; }
 .page-title { font-size: 16px; }
 .page-subtitle { font-size: 11px; }
 .stat-value { font-size: 22px; }
+.brand { height: 64px; }
 }
+
 @media (max-width: 480px) {
 #laporanDrawer { --bs-offcanvas-width: min(var(--drawer-width), 92vw); }
 .content { padding: 12px; }
@@ -242,145 +145,74 @@ body.drawer-open .btn-float-laporan { right: 22px; }
 @php
 $user = auth()->user();
 $isAdmin = $user && ($user->role ?? '') === 'admin';
-$laporanHariIni = $isAdmin ? \App\Models\LaporanHarian::whereDate('tanggal', today())->count() : 0;
 @endphp
 
 <aside class="sidebar" id="sidebar">
+{{-- ✅ BRAND: HANYA LOGO --}}
 <div class="brand">
+<img src="{{ asset('logo.png') }}" alt="Logo" class="brand-logo"
+onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
 <div class="brand-icon"><i class="bi bi-egg-fried"></i></div>
-<div class="brand-text">
-<div class="brand-title">BukanAyam</div>
-<div class="brand-subtitle">Peternakan Ayam</div>
 </div>
-</div>
-
-@if ($isAdmin)
-<div class="sidebar-search">
-<div class="search-box">
-<i class="bi bi-search"></i>
-<input id="sidebarSearch" type="text" placeholder="Cari menu...">
-</div>
-</div>
-@endif
-
 <div class="sidebar-content">
 @if ($isAdmin)
-    <div class="menu-title">Menu Utama</div>
-    <a href="{{ route('dashboard') }}" class="menu-link {{ request()->routeIs('dashboard') ? 'active' : '' }}">
-        <i class="bi bi-grid-1x2-fill"></i><span class="menu-label">Dashboard</span>
-    </a>
-
-    <div class="menu-title">Data & Transaksi</div>
-
-    {{-- ===== DROPDOWN: PETERNAKAN ===== --}}
-    @php $openPeternakan = request()->is('kandang*','populasi*','bobot*'); @endphp
-    <div class="menu-group {{ $openPeternakan ? 'open' : '' }}">
-        <button type="button" class="menu-parent" data-bs-toggle="collapse" data-bs-target="#mPeternakan"
-                aria-expanded="{{ $openPeternakan ? 'true' : 'false' }}">
-            <i class="bi bi-house-door-fill"></i><span class="menu-label">Peternakan</span>
-            <i class="bi bi-chevron-down arrow"></i>
-        </button>
-        <div class="collapse {{ $openPeternakan ? 'show' : '' }}" id="mPeternakan">
-            <div class="menu-sub">
-                <a href="{{ route('kandang.index') }}" class="menu-link {{ request()->is('kandang*') ? 'active' : '' }}">
-                    <i class="bi bi-house-door"></i><span class="menu-label">Kandang</span>
-                </a>
-                <a href="{{ route('populasi.index') }}" class="menu-link {{ request()->is('populasi*') ? 'active' : '' }}">
-                    <i class="bi bi-people-fill"></i><span class="menu-label">Populasi Ayam</span>
-                </a>
-                <a href="{{ route('bobot.index') }}" class="menu-link {{ request()->is('bobot*') ? 'active' : '' }}">
-                    <i class="bi bi-speedometer2"></i><span class="menu-label">Bobot Ayam</span>
-                </a>
-            </div>
-        </div>
-    </div>
-
-    {{-- ===== DROPDOWN: PRODUKSI ===== --}}
-    @php $openProduksi = request()->is('produksi-telur*','stok-telur*','gudang-telur*'); @endphp
-    <div class="menu-group {{ $openProduksi ? 'open' : '' }}">
-        <button type="button" class="menu-parent" data-bs-toggle="collapse" data-bs-target="#mProduksi"
-                aria-expanded="{{ $openProduksi ? 'true' : 'false' }}">
-            <i class="bi bi-egg-fill"></i><span class="menu-label">Produksi</span>
-            <i class="bi bi-chevron-down arrow"></i>
-        </button>
-        <div class="collapse {{ $openProduksi ? 'show' : '' }}" id="mProduksi">
-            <div class="menu-sub">
-                <a href="{{ route('produksi-telur.index') }}" class="menu-link {{ request()->is('produksi-telur*') ? 'active' : '' }}">
-                    <i class="bi bi-egg"></i><span class="menu-label">Produksi Telur</span>
-                </a>
-                <a href="{{ route('stok-telur.index') }}" class="menu-link {{ request()->is('stok-telur*') ? 'active' : '' }}">
-                    <i class="bi bi-boxes"></i><span class="menu-label">Stok Telur</span>
-                </a>
-                <a href="{{ route('gudang-telur.index') }}" class="menu-link {{ request()->is('gudang-telur*') ? 'active' : '' }}">
-                    <i class="bi bi-building"></i><span class="menu-label">Gudang Telur</span>
-                </a>
-            </div>
-        </div>
-    </div>
-
-    {{-- ===== DROPDOWN: PENJUALAN & KEUANGAN ===== --}}
-    @php $openJual = request()->is('penjualan-telur*','arus-kas*'); @endphp
-    <div class="menu-group {{ $openJual ? 'open' : '' }}">
-        <button type="button" class="menu-parent" data-bs-toggle="collapse" data-bs-target="#mJual"
-                aria-expanded="{{ $openJual ? 'true' : 'false' }}">
-            <i class="bi bi-cash-stack"></i><span class="menu-label">Penjualan</span>
-            <i class="bi bi-chevron-down arrow"></i>
-        </button>
-        <div class="collapse {{ $openJual ? 'show' : '' }}" id="mJual">
-            <div class="menu-sub">
-                <a href="{{ route('penjualan-telur.index') }}" class="menu-link {{ request()->is('penjualan-telur*') ? 'active' : '' }}">
-                    <i class="bi bi-cart-fill"></i><span class="menu-label">Penjualan Telur</span>
-                </a>
-                <a href="{{ route('arus-kas.index') }}" class="menu-link {{ request()->is('arus-kas*') ? 'active' : '' }}">
-                    <i class="bi bi-cash-coin"></i><span class="menu-label">Arus Kas</span>
-                </a>
-            </div>
-        </div>
-    </div>
-
-    {{-- ===== DROPDOWN: PAKAN ===== --}}
-    @php $openPakan = request()->is('pakan-kandang*','pemberian-pakan*','laporan-pakan*'); @endphp
-    <div class="menu-group {{ $openPakan ? 'open' : '' }}">
-        <button type="button" class="menu-parent" data-bs-toggle="collapse" data-bs-target="#mPakan"
-                aria-expanded="{{ $openPakan ? 'true' : 'false' }}">
-            <i class="bi bi-basket-fill"></i><span class="menu-label">Pakan</span>
-            <i class="bi bi-chevron-down arrow"></i>
-        </button>
-        <div class="collapse {{ $openPakan ? 'show' : '' }}" id="mPakan">
-            <div class="menu-sub">
-                <a href="{{ route('pakan-kandang.index') }}" class="menu-link {{ request()->is('pakan-kandang*') ? 'active' : '' }}">
-                    <i class="bi bi-box-seam-fill"></i><span class="menu-label">Stok Pakan</span>
-                </a>
-                <a href="{{ route('pemberian-pakan.index') }}" class="menu-link {{ request()->is('pemberian-pakan*') ? 'active' : '' }}">
-                    <i class="bi bi-basket2-fill"></i><span class="menu-label">Pemberian Pakan</span>
-                </a>
-                <a href="{{ route('pakan.laporan') }}" class="menu-link {{ request()->is('laporan-pakan*') ? 'active' : '' }}">
-                    <i class="bi bi-bar-chart-fill"></i><span class="menu-label">Laporan Pakan</span>
-                </a>
-            </div>
-        </div>
-    </div>
-
-    <div class="menu-title">Man Power</div>
-    <a href="{{ route('admin.laporan.index') }}" class="menu-link {{ request()->is('admin/laporan*') ? 'active' : '' }}">
-        <i class="bi bi-clipboard2-data-fill"></i><span class="menu-label">Laporan Harian</span>
-        @if ($laporanHariIni > 0)
-            <span class="menu-badge accent">{{ $laporanHariIni }}</span>
-        @endif
-    </a>
+<div class="menu-title">Menu Utama</div>
+<a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">
+<i class="bi bi-grid-1x2-fill"></i> Dashboard
+</a>
+<div class="menu-title">Data Peternakan</div>
+<a href="{{ route('kandang.index') }}" class="{{ request()->is('kandang*') ? 'active' : '' }}">
+<i class="bi bi-house-door-fill"></i> Kandang
+</a>
+<a href="{{ route('populasi.index') }}" class="{{ request()->is('populasi*') ? 'active' : '' }}">
+<i class="bi bi-people-fill"></i> Populasi Ayam
+</a>
+<a href="{{ route('bobot.index') }}" class="{{ request()->is('bobot*') ? 'active' : '' }}">
+<i class="bi bi-speedometer2"></i> Bobot Ayam
+</a>
+<div class="menu-title">Produksi</div>
+<a href="{{ route('produksi-telur.index') }}" class="{{ request()->is('produksi-telur*') ? 'active' : '' }}">
+<i class="bi bi-egg-fill"></i> Produksi Telur
+</a>
+<a href="{{ route('penjualan-telur.index') }}" class="{{ request()->is('penjualan-telur*') ? 'active' : '' }}">
+<i class="bi bi-cash-stack"></i> Penjualan Telur
+</a>
+<a href="{{ route('stok-telur.index') }}" class="{{ request()->is('stok-telur*') ? 'active' : '' }}">
+<i class="bi bi-boxes"></i> Stok Telur
+</a>
+<a href="{{ route('gudang-telur.index') }}" class="{{ request()->is('gudang-telur*') ? 'active' : '' }}">
+<i class="bi bi-building"></i> Gudang Telur
+</a>
+<div class="menu-title">Keuangan</div>
+<a href="{{ route('arus-kas.index') }}" class="{{ request()->is('arus-kas*') ? 'active' : '' }}">
+<i class="bi bi-cash-coin"></i> Arus Kas
+</a>
+<div class="menu-title">Pakan</div>
+<a href="{{ route('pakan-kandang.index') }}" class="{{ request()->is('pakan-kandang*') ? 'active' : '' }}">
+<i class="bi bi-box-seam-fill"></i> Stok Pakan
+</a>
+<a href="{{ route('pemberian-pakan.index') }}" class="{{ request()->is('pemberian-pakan*') ? 'active' : '' }}">
+<i class="bi bi-basket-fill"></i> Pemberian Pakan
+</a>
+<a href="{{ route('pakan.laporan') }}" class="{{ request()->is('laporan-pakan*') ? 'active' : '' }}">
+<i class="bi bi-bar-chart-fill"></i> Laporan Pakan
+</a>
+<div class="menu-title">Man Power</div>
+<a href="{{ route('admin.laporan.index') }}" class="{{ request()->is('admin/laporan*') ? 'active' : '' }}">
+<i class="bi bi-clipboard2-data-fill"></i> Laporan Harian
+</a>
 @else
-    <div class="menu-title">Menu</div>
-    <a href="{{ route('manpower.laporan.create') }}" class="menu-link {{ request()->routeIs('manpower.laporan.*') ? 'active' : '' }}">
-        <i class="bi bi-pencil-square"></i><span class="menu-label">Input Laporan Harian</span>
-    </a>
+<div class="menu-title">Menu</div>
+<a href="{{ route('manpower.laporan.create') }}" class="{{ request()->routeIs('manpower.laporan.*') ? 'active' : '' }}">
+<i class="bi bi-pencil-square"></i> Input Laporan Harian
+</a>
 @endif
 </div>
-
 <div class="sidebar-footer">
-<form method="POST" action="{{ route('logout') }}">
+<form method="POST" action="{{ route('logout') }}" class="mb-0">
 @csrf
-<button type="submit" class="btn-logout">
-<i class="bi bi-box-arrow-right"></i><span class="menu-label">Keluar</span>
+<button type="submit" class="btn-logout w-100 text-start d-flex align-items-center gap-2">
+<i class="bi bi-box-arrow-right"></i> Keluar
 </button>
 </form>
 </div>
@@ -439,7 +271,6 @@ var btn     = document.getElementById('btnToggleSidebar');
 var overlay = document.getElementById('sidebarOverlay');
 var sidebar = document.getElementById('sidebar');
 function isMobile() { return window.innerWidth < 992; }
-
 if (btn) btn.addEventListener('click', function () {
 if (isMobile()) document.body.classList.toggle('sidebar-open');
 else            document.body.classList.toggle('sidebar-collapsed');
@@ -455,31 +286,14 @@ if (isMobile()) document.body.classList.remove('sidebar-open');
 window.addEventListener('resize', function () {
 if (!isMobile()) document.body.classList.remove('sidebar-open');
 });
-
-/* ===== SEARCH FILTER MENU (buka dropdown saat mencari) ===== */
-var searchInput = document.getElementById('sidebarSearch');
-if (searchInput) searchInput.addEventListener('input', function () {
-var q = this.value.trim().toLowerCase();
-document.querySelectorAll('.sidebar-content a.menu-link').forEach(function (a) {
-var label = a.querySelector('.menu-label');
-var text  = label ? label.textContent.toLowerCase() : '';
-a.style.display = (!q || text.indexOf(q) !== -1) ? '' : 'none';
-});
-document.querySelectorAll('.menu-group .collapse').forEach(function (el) {
-var inst = bootstrap.Collapse.getOrCreateInstance(el, { toggle: false });
-if (q) { inst.show(); }
-else if (el.querySelector('a.active')) { inst.show(); }
-else { inst.hide(); }
-});
-});
 })();
 </script>
 
-{{-- ===== FLOATING LAPORAN HARIAN (khusus admin) ===== --}}
 @if ($isAdmin)
 @php
 $laporanFloating = \App\Models\LaporanHarian::with('kandang')
 ->latest('tanggal')->latest('id')->limit(12)->get();
+$laporanHariIni = \App\Models\LaporanHarian::whereDate('tanggal', today())->count();
 @endphp
 <button class="btn-float-laporan" type="button" data-bs-toggle="offcanvas"
 data-bs-target="#laporanDrawer" aria-controls="laporanDrawer"
@@ -494,7 +308,7 @@ title="Lihat laporan harian terbaru">
 aria-labelledby="laporanDrawerLabel"
 data-bs-backdrop="false"
 data-bs-scroll="true">
-<div class="offcanvas-header" style="background: var(--primary); color:#fff;">
+<div class="offcanvas-header" style="background: var(--sidebar); color:#fff;">
 <h5 class="offcanvas-title fw-bold" id="laporanDrawerLabel">
 <i class="bi bi-clipboard2-data-fill me-2"></i>Laporan Harian Terbaru
 </h5>

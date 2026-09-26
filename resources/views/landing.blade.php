@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BukanAyam — Sistem Manajemen Peternakan Ayam | Desa Tanjung Agung</title>
+<title>Sistem Manajemen Peternakan Ayam | Desa Tanjung Agung</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -17,7 +17,6 @@
 html{scroll-behavior:smooth}
 body{font-family:'Inter',sans-serif;background:var(--krem);color:#33261f;margin:0}
 
-/* ================= NAVBAR ================= */
 .nav-landing{
 position:fixed; top:0; left:0; right:0; z-index:1030;
 background:transparent;
@@ -26,97 +25,42 @@ transition: background .35s ease, border-color .35s ease, backdrop-filter .35s e
 padding: 18px 0;
 }
 .nav-landing .container{padding:0 24px}
-.nav-landing .navbar-brand{
-display:flex; align-items:center; gap:10px;
-text-decoration:none;
-}
-.nav-logo{
-height: 46px;
-width: auto;
-object-fit: contain;
-display: block;
-background: transparent;
-border: none;
-box-shadow: none;
-border-radius: 0;
-padding: 0;
-}
-.nav-landing.scrolled .nav-logo{ height: 38px; }
-.brand-divider{
-width: 1px;
-height: 32px;
-background: currentColor;
-opacity: .25;
-margin: 0 12px;
-}
+.nav-landing .navbar-brand{display:flex; align-items:center; gap:10px; text-decoration:none;}
+.brand-logos{display:flex;align-items:center;gap:12px;}
+.nav-logo{height:46px;width:auto;object-fit:contain;display:block;background:transparent;border:none;box-shadow:none;border-radius:0;padding:0}
+/* ✅ logo PKN TANPA background putih */
+.nav-logo-pkn{height:42px;background:transparent;border-radius:0;padding:0;box-shadow:none;}
+.nav-landing.scrolled .nav-logo{height:38px}
+.nav-landing.scrolled .nav-logo-pkn{height:34px}
 .brand-egg{
 width:40px;height:40px;border-radius:10px;
 background:linear-gradient(135deg,var(--coklat-500),var(--coklat-400));
-display:none;
-align-items:center;justify-content:center;
-color:#ffe9c9;font-size:20px;
-box-shadow: 0 4px 12px rgba(0,0,0,.25);
+display:none;align-items:center;justify-content:center;
+color:#ffe9c9;font-size:20px;box-shadow:0 4px 12px rgba(0,0,0,.25);
 }
 .brand-egg i{display:inline-block;animation:wobble 2.6s ease-in-out infinite}
-.brand-text{
-font-weight: 800;
-font-size: 20px;
-letter-spacing: 0.3px;
-}
-.nav-landing .brand-text,
-.nav-landing .navbar-brand{
-color: var(--teks-terang);
-text-shadow: 0 2px 10px rgba(0,0,0,.45);
-}
-.nav-landing .nav-links a{
-color: var(--teks-terang);
-text-decoration:none;
-font-size:14px;
-font-weight:600;
-margin-left:22px;
-text-shadow: 0 1px 6px rgba(0,0,0,.4);
-transition: color .2s, transform .2s;
-display:inline-block;
-}
-.nav-landing .nav-links a:hover{
-color: #fff;
-transform: translateY(-1px);
-}
+.nav-landing .nav-links a{color:var(--teks-terang);text-decoration:none;font-size:14px;font-weight:600;margin-left:22px;text-shadow:0 1px 6px rgba(0,0,0,.4);transition:color .2s,transform .2s;display:inline-block}
+.nav-landing .nav-links a:hover{color:#fff;transform:translateY(-1px)}
 .nav-landing.scrolled{
-background: rgba(45, 27, 22, 0.85);
-backdrop-filter: blur(14px) saturate(140%);
--webkit-backdrop-filter: blur(14px) saturate(140%);
-border-bottom: 1px solid rgba(255,255,255,0.08);
-padding: 10px 0;
-box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+background:rgba(45,27,22,.85);
+backdrop-filter:blur(14px) saturate(140%);
+-webkit-backdrop-filter:blur(14px) saturate(140%);
+border-bottom:1px solid rgba(255,255,255,.08);
+padding:10px 0;box-shadow:0 8px 24px rgba(0,0,0,.18);
 }
-.nav-landing.scrolled .brand-text{
-color: #fff;
-text-shadow: none;
-transform: scale(.97);
-transform-origin: left center;
-transition: transform .3s ease;
-}
-.nav-landing.scrolled .nav-links a{
-color: rgba(255,255,255,.9);
-text-shadow: none;
-}
-.nav-landing.scrolled .nav-links a:hover{ color:#fff; }
-.nav-spacer{height:80px}
+.nav-landing.scrolled .nav-links a{color:rgba(255,255,255,.9);text-shadow:none}
+.nav-landing.scrolled .nav-links a:hover{color:#fff}
 .btn-cta{background:var(--aksen);color:var(--coklat-900);font-weight:700;border:none;padding:8px 18px}
 .btn-cta:hover{background:#c6935a;color:var(--coklat-900)}
-.btn-ghost{border:1px solid rgba(255,255,255,.55);color:var(--teks-terang);padding:8px 18px;font-weight:600}
-.btn-ghost:hover{background:rgba(255,255,255,.15);color:#fff}
 
-/* ================= HERO ================= */
 .hero{
 background:linear-gradient(135deg,var(--coklat-900) 0%,var(--coklat-700) 60%,var(--coklat-500) 100%);
 color:#fff;overflow:hidden;position:relative;
-padding: 100px 0 150px;
+padding:120px 0 60px;
 }
 .hero::before{
 content:"";position:absolute;inset:0;
-background: radial-gradient(circle at 20% 30%, rgba(215,168,110,.15), transparent 40%),
+background:radial-gradient(circle at 20% 30%, rgba(215,168,110,.15), transparent 40%),
 radial-gradient(circle at 80% 70%, rgba(215,168,110,.10), transparent 40%);
 pointer-events:none;
 }
@@ -126,60 +70,32 @@ pointer-events:none;
 .egg.s1{width:64px;height:80px;left:6%;top:30px;animation:float 3.2s .3s ease-in-out infinite}
 .egg.s2{width:46px;height:58px;right:8%;top:20px;animation:float 3.6s .8s ease-in-out infinite}
 .egg.s3{width:54px;height:68px;right:18%;bottom:60px;animation:float 3s 1.2s ease-in-out infinite}
-.chicken-wrap{
-position:absolute;left:50%;top:50%;
-transform:translate(-50%,-50%);
-width: 320px; height: 320px;
-}
+.chicken-wrap{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:320px;height:320px}
 .chicken-wrap svg{width:100%;height:100%;overflow:visible}
 .ch-body{transform-origin:50% 100%;animation:bodyBounce 1.4s ease-in-out infinite}
 .ch-head{transform-origin:50% 100%;animation:headNod 2s ease-in-out infinite}
-.ch-wing-left{transform-origin:90% 30%;animation:flapL 0.9s ease-in-out infinite}
-.ch-wing-right{transform-origin:10% 30%;animation:flapR 0.9s ease-in-out infinite}
+.ch-wing-left{transform-origin:90% 30%;animation:flapL .9s ease-in-out infinite}
+.ch-wing-right{transform-origin:10% 30%;animation:flapR .9s ease-in-out infinite}
 .ch-tail{transform-origin:50% 80%;animation:tailWag 1.8s ease-in-out infinite}
 .ch-comb{transform-origin:50% 100%;animation:combWiggle 1.4s ease-in-out infinite}
 .ch-eye{transform-origin:center;animation:blink 4s infinite}
 .ch-beak{transform-origin:50% 30%;animation:beakTalk 2.4s ease-in-out infinite}
-.ch-egg-drop{transform-origin:center;animation: eggDrop 3.5s ease-in infinite;opacity:0;}
+.ch-egg-drop{transform-origin:center;animation:eggDrop 3.5s ease-in infinite;opacity:0}
 .grass{transform-origin:bottom center;animation:grassSway 3s ease-in-out infinite}
 
-@keyframes bodyBounce{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-8px) rotate(1deg)}}
-@keyframes headNod{0%,100%{transform:translateY(0) rotate(0)}25%{transform:translateY(-3px) rotate(-6deg)}75%{transform:translateY(-1px) rotate(5deg)}}
-@keyframes flapL{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(-35deg)}}
-@keyframes flapR{0%,100%{transform:rotate(5deg)}50%{transform:rotate(35deg)}}
-@keyframes tailWag{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(6deg)}}
-@keyframes combWiggle{0%,100%{transform:rotate(0)}50%{transform:rotate(3deg)}}
-@keyframes blink{0%, 92%, 100%{transform:scaleY(1)}95%{transform:scaleY(0.1)}}
-@keyframes beakTalk{0%,40%,100%{transform:rotate(0)}45%{transform:rotate(8deg)}55%{transform:rotate(-3deg)}65%{transform:rotate(5deg)}}
-@keyframes eggDrop{0%{transform:translate(0,0) scale(.6);opacity:0}15%{transform:translate(0,0) scale(.9);opacity:1}70%{transform:translate(-20px,120px) scale(1);opacity:1}90%{transform:translate(-25px,150px) scale(1.05);opacity:.7}100%{transform:translate(-30px,170px) scale(.8);opacity:0}}
-@keyframes grassSway{0%,100%{transform:skewX(-2deg)}50%{transform:skewX(3deg)}}
-@keyframes float{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-16px) rotate(2deg)}}
-@keyframes wobble{0%,100%{transform:rotate(0)}25%{transform:rotate(-10deg)}75%{transform:rotate(10deg)}}
-
-/* ================= ✅ PEMBATAS GELOMBANG HIDUP ================= */
 .wave-divider{
-position: relative;
-height: 120px;
-margin-top: -120px;          /* menimpa bagian bawah hero */
-overflow: hidden;
-pointer-events: none;
-z-index: 5;
+position:relative;
+height:120px;
+overflow:hidden;
+background:linear-gradient(180deg, var(--coklat-500) 0%, var(--coklat-600) 100%);
 }
-.wave-layer{ position:absolute; inset:0; }
-.wave-layer svg{
-position:absolute; bottom:0; left:0;
-width:200%; height:100%;
-display:block;
-}
-/* 3 layer: beda kecepatan & arah biar terlihat "hidup" */
-.wl-back  { animation: waveBob 7s ease-in-out infinite; }
-.wl-back svg  { fill: var(--krem); opacity:.30; animation: waveMove 26s linear infinite; }
-.wl-mid   { animation: waveBob 5.5s ease-in-out infinite .6s; }
-.wl-mid svg   { fill: var(--krem); opacity:.55; animation: waveMove 17s linear infinite reverse; }
-.wl-front { animation: waveBob 4.5s ease-in-out infinite .3s; }
-.wl-front svg { fill: var(--krem); opacity:1;  animation: waveMove 11s linear infinite; }
-@keyframes waveMove{ from{ transform: translateX(0); } to{ transform: translateX(-50%); } }
-@keyframes waveBob{ 0%,100%{ transform: translateY(0); } 50%{ transform: translateY(7px); } }
+.wave{position:absolute;bottom:0;left:0;width:200%;height:100%;}
+.wave.w1{bottom:26px;opacity:.28;animation:waveMove 19s linear infinite;}
+.wave.w2{bottom:12px;opacity:.55;animation:waveMove 13s linear infinite reverse;}
+.wave.w3{bottom:0;opacity:1;animation:waveMove 9s linear infinite;}
+.wave.w1 path,.wave.w2 path{fill:var(--krem);}
+.wave.w3 path{fill:var(--krem-2);}
+@keyframes waveMove{from{transform:translateX(0);}to{transform:translateX(-50%);}}
 
 .section-title{font-weight:800}
 .feature-card{background:#fff;border:1px solid #e6dacc;border-radius:16px;padding:24px;height:100%;transition:.2s}
@@ -188,26 +104,43 @@ display:block;
 .about{background:var(--krem-2)}
 .check-item i{color:var(--coklat-500)}
 footer{background:var(--coklat-900);color:#cbb5a8}
+
+@keyframes bodyBounce{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-8px) rotate(1deg)}}
+@keyframes headNod{0%,100%{transform:translateY(0) rotate(0)}25%{transform:translateY(-3px) rotate(-6deg)}75%{transform:translateY(-1px) rotate(5deg)}}
+@keyframes flapL{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(-35deg)}}
+@keyframes flapR{0%,100%{transform:rotate(5deg)}50%{transform:rotate(35deg)}}
+@keyframes tailWag{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(6deg)}}
+@keyframes combWiggle{0%,100%{transform:rotate(0)}50%{transform:rotate(3deg)}}
+@keyframes blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
+@keyframes beakTalk{0%,40%,100%{transform:rotate(0)}45%{transform:rotate(8deg)}55%{transform:rotate(-3deg)}65%{transform:rotate(5deg)}}
+@keyframes eggDrop{0%{transform:translate(0,0) scale(.6);opacity:0}15%{transform:translate(0,0) scale(.9);opacity:1}70%{transform:translate(-20px,120px) scale(1);opacity:1}90%{transform:translate(-25px,150px) scale(1.05);opacity:.7}100%{transform:translate(-30px,170px) scale(.8);opacity:0}}
+@keyframes grassSway{0%,100%{transform:skewX(-2deg)}50%{transform:skewX(3deg)}}
+@keyframes float{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-16px) rotate(2deg)}}
+@keyframes wobble{0%,100%{transform:rotate(0)}25%{transform:rotate(-10deg)}75%{transform:rotate(10deg)}}
+
 @media (max-width:991px){
 .chicken-wrap{width:240px;height:240px}
 .stage{min-height:340px}
 .nav-landing .nav-links{display:none}
-.brand-text{font-size:17px}
-.wave-divider{height:80px;margin-top:-80px}
+.wave-divider{height:90px}
+.nav-logo{height:36px}
+.nav-logo-pkn{height:32px}
 }
 </style>
 </head>
 <body>
 
-<!-- NAVBAR -->
 <nav class="nav-landing" id="navLanding">
 <div class="container d-flex align-items-center justify-content-between">
+{{-- ✅ HANYA LOGO, TANPA TULISAN --}}
 <a href="{{ url('/') }}" class="navbar-brand">
-<img src="{{ asset('logo.png') }}" alt="Logo Perusahaan" class="nav-logo"
-onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-flex';">
+<span class="brand-logos">
+<img src="{{ asset('logo.png') }}" alt="Logo" class="nav-logo"
+onerror="this.style.display='none'; this.parentElement.querySelector('.brand-egg').style.display='flex';">
+<img src="{{ asset('logopkn.png') }}" alt="Logo PKN" class="nav-logo nav-logo-pkn"
+onerror="this.style.display='none';">
 <span class="brand-egg"><i class="bi bi-egg-fried"></i></span>
-<span class="brand-divider"></span>
-<span class="brand-text">BukanAyam</span>
+</span>
 </a>
 <div class="nav-links d-none d-md-block">
 <a href="#tentang">Tentang</a>
@@ -225,9 +158,7 @@ Masuk <i class="bi bi-box-arrow-in-right ms-1"></i>
 </div>
 </div>
 </nav>
-<div class="nav-spacer"></div>
 
-<!-- HERO -->
 <header class="hero">
 <div class="container">
 <div class="row align-items-center g-4">
@@ -239,7 +170,7 @@ Masuk <i class="bi bi-box-arrow-in-right ms-1"></i>
 Kelola Peternakan Ayam Jadi <span style="color:var(--aksen)">Lebih Mudah</span>
 </h1>
 <p class="lead mb-4" style="color:#e8d9c8">
-Aplikasi BukanAyam dikembangkan dengan dukungan PT Pesona Khatulistiwa Nusantara (PKN), perusahaan yang berkomitmen pada digitalisasi dan pemberdayaan masyarakat desa. Kehadiran PKN membantu peternak ayam di Desa Tanjung Agung beralih dari pencatatan manual ke sistem terintegrasi — populasi, produksi telur, penjualan, hingga pakan tercatat akurat dan dapat dipantau kapan saja.
+Aplikasi ini dikembangkan dengan dukungan PT Pesona Khatulistiwa Nusantara (PKN), perusahaan yang berkomitmen pada digitalisasi dan pemberdayaan masyarakat desa. Kehadiran PKN membantu peternak ayam di Desa Tanjung Agung beralih dari pencatatan manual ke sistem terintegrasi — populasi, produksi telur, penjualan, hingga pakan tercatat akurat dan dapat dipantau kapan saja.
 </p>
 </div>
 <div class="col-lg-6 d-none d-lg-block">
@@ -316,38 +247,25 @@ Aplikasi BukanAyam dikembangkan dengan dukungan PT Pesona Khatulistiwa Nusantara
 </div>
 </header>
 
-{{-- ===== ✅ PEMBATAS GELOMBANG HIDUP (hero → konten) ===== --}}
 <div class="wave-divider" aria-hidden="true">
-<div class="wave-layer wl-back">
-<svg viewBox="0 0 2880 140" preserveAspectRatio="none">
+<svg class="wave w1" viewBox="0 0 2880 140" preserveAspectRatio="none">
 <path d="M0,60 C240,100 480,100 720,60 C960,20 1200,20 1440,60 C1680,100 1920,100 2160,60 C2400,20 2640,20 2880,60 L2880,140 L0,140 Z"/>
 </svg>
-</div>
-<div class="wave-layer wl-mid">
-<svg viewBox="0 0 2880 140" preserveAspectRatio="none">
+<svg class="wave w2" viewBox="0 0 2880 140" preserveAspectRatio="none">
 <path d="M0,70 C240,30 480,30 720,70 C960,110 1200,110 1440,70 C1680,30 1920,30 2160,70 C2400,110 2640,110 2880,70 L2880,140 L0,140 Z"/>
 </svg>
-</div>
-<div class="wave-layer wl-front">
-<svg viewBox="0 0 2880 140" preserveAspectRatio="none">
+<svg class="wave w3" viewBox="0 0 2880 140" preserveAspectRatio="none">
 <path d="M0,80 C240,120 480,120 720,80 C960,40 1200,40 1440,80 C1680,120 1920,120 2160,80 C2400,40 2640,40 2880,80 L2880,140 L0,140 Z"/>
 </svg>
 </div>
-</div>
 
-</div>
-</div>
-</div>
-</section>
-
-<!-- TENTANG -->
 <section id="tentang" class="about py-5">
 <div class="container py-4">
 <div class="row align-items-center g-4">
 <div class="col-lg-6">
 <h2 class="section-title mb-3">Tentang Aplikasi</h2>
 <p class="mb-3">
-BukanAyam dibangun untuk membantu peternakan ayam di
+Aplikasi ini dibangun untuk membantu peternakan ayam di
 <strong>Desa Tanjung Agung</strong> mencatat dan mengelola data peternakan
 secara digital. Data yang sebelumnya tersebar di buku catatan — populasi
 ayam, produksi telur, penjualan, sampai pemakaian pakan — kini terkumpul
@@ -365,9 +283,8 @@ dalam satu sistem yang bisa diakses kapan saja.
 <div class="feature-icon mx-auto" style="width:70px;height:70px;font-size:32px">
 <i class="bi bi-egg-fried"></i>
 </div>
-<h4 class="fw-bold mt-3">BukanAyam</h4>
-<p class="text-muted small mb-4">Sistem Manajemen Peternakan Ayam</p>
-<div class="d-flex justify-content-center gap-2 flex-wrap">
+<p class="text-muted small mb-0 mt-3">Sistem Manajemen Peternakan Ayam</p>
+<div class="d-flex justify-content-center gap-2 flex-wrap mt-3">
 <span class="badge rounded-pill" style="background:var(--krem-2);color:var(--coklat-600)">
 <i class="bi bi-geo-alt me-1"></i>Desa Tanjung Agung
 </span>
@@ -383,7 +300,7 @@ dalam satu sistem yang bisa diakses kapan saja.
 
 <footer class="py-4">
 <div class="container d-flex flex-wrap justify-content-between gap-2 small">
-<span><i class="bi bi-egg-fried me-1"></i> BukanAyam — Desa Tanjung Agung</span>
+<span><i class="bi bi-egg-fried me-1"></i> Desa Tanjung Agung</span>
 <span>© {{ date('Y') }} Sistem Manajemen Peternakan Ayam</span>
 </div>
 </footer>
