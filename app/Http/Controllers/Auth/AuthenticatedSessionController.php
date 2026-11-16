@@ -21,11 +21,7 @@ class AuthenticatedSessionController extends Controller
         $request->authenticate();
         $request->session()->regenerate();
 
-        return redirect(
-            $request->user()->role === 'admin'
-                ? route('dashboard')
-                : route('manpower.laporan.create')
-        );
+        return redirect()->intended($this->redirectByRole($request->user()));
     }
 
     public function destroy(Request $request): RedirectResponse
@@ -33,7 +29,16 @@ class AuthenticatedSessionController extends Controller
         Auth::guard('web')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
-
         return redirect('/');
+    }
+
+    protected function redirectByRole($user): string
+    {
+        return match ($user->role ?? '') {
+            'admin'    => route('dashboard'),
+            'umum'     => route('dashboard'),   // ✅ umum juga masuk dashboard
+            'manpower' => route('manpower.laporan.create'),
+            default    => route('landing'),
+        };
     }
 }

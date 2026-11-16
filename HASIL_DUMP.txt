@@ -94,49 +94,137 @@ Route::get('/', function () {
     return view('landing');
 })->name('landing');
 
-/* ========== KHUSUS ADMIN ========== */
+/* =====================================================================
+   1) KHUSUS ADMIN — ROUTE FORM & TULIS DATA
+   ⚠️ WAJIB terdaftar PALING AWAL (sebelum route wildcard {id})
+   supaya /kandang/create tidak "diculik" oleh /kandang/{kandang}
+===================================================================== */
 Route::middleware(['auth', 'role:admin'])->group(function () {
-    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
-    Route::resource('kandang', KandangController::class);
-    Route::resource('populasi', PopulasiController::class);
-    Route::resource('bobot', BobotAyamController::class);
-    Route::resource('produksi-telur', ProduksiTelurController::class);
-    Route::resource('penjualan-telur', PenjualanTelurController::class);
-    Route::resource('pemberian-pakan', PemberianPakanController::class);
-    Route::resource('pakan-kandang', PakanKandangController::class);
+    // ----- Kandang -----
+    Route::get('/kandang/create', [KandangController::class, 'create'])->name('kandang.create');
+    Route::post('/kandang', [KandangController::class, 'store'])->name('kandang.store');
+    Route::get('/kandang/{kandang}/edit', [KandangController::class, 'edit'])->name('kandang.edit')->whereNumber('kandang');
+    Route::put('/kandang/{kandang}', [KandangController::class, 'update'])->name('kandang.update')->whereNumber('kandang');
+    Route::patch('/kandang/{kandang}', [KandangController::class, 'update']);
+    Route::delete('/kandang/{kandang}', [KandangController::class, 'destroy'])->name('kandang.destroy')->whereNumber('kandang');
 
-    // Gudang Telur
-    Route::resource('gudang-telur', GudangTelurController::class)
-        ->parameters(['gudang-telur' => 'gudangTelur']);
+    // ----- Populasi -----
+    Route::get('/populasi/create', [PopulasiController::class, 'create'])->name('populasi.create');
+    Route::post('/populasi', [PopulasiController::class, 'store'])->name('populasi.store');
+    Route::get('/populasi/{populasi}/edit', [PopulasiController::class, 'edit'])->name('populasi.edit')->whereNumber('populasi');
+    Route::put('/populasi/{populasi}', [PopulasiController::class, 'update'])->name('populasi.update')->whereNumber('populasi');
+    Route::patch('/populasi/{populasi}', [PopulasiController::class, 'update']);
+    Route::delete('/populasi/{populasi}', [PopulasiController::class, 'destroy'])->name('populasi.destroy')->whereNumber('populasi');
 
-    // Stok Telur (Index, Return, dan Stok Masuk Manual)
-    Route::get('/stok-telur', [StokTelurController::class, 'index'])->name('stok-telur.index');
+    // ----- Bobot -----
+    Route::get('/bobot/create', [BobotAyamController::class, 'create'])->name('bobot.create');
+    Route::post('/bobot', [BobotAyamController::class, 'store'])->name('bobot.store');
+    Route::get('/bobot/{bobot}/edit', [BobotAyamController::class, 'edit'])->name('bobot.edit')->whereNumber('bobot');
+    Route::put('/bobot/{bobot}', [BobotAyamController::class, 'update'])->name('bobot.update')->whereNumber('bobot');
+    Route::patch('/bobot/{bobot}', [BobotAyamController::class, 'update']);
+    Route::delete('/bobot/{bobot}', [BobotAyamController::class, 'destroy'])->name('bobot.destroy')->whereNumber('bobot');
 
-    // Return Telur
-    Route::post('/stok-telur/return', [StokTelurController::class, 'storeReturn'])->name('stok-telur.return.store');
-    Route::delete('/stok-telur/return/{returnTelur}', [StokTelurController::class, 'destroyReturn'])->name('stok-telur.return.destroy');
+    // ----- Produksi Telur -----
+    Route::get('/produksi-telur/create', [ProduksiTelurController::class, 'create'])->name('produksi-telur.create');
+    Route::post('/produksi-telur', [ProduksiTelurController::class, 'store'])->name('produksi-telur.store');
+    Route::get('/produksi-telur/{produksiTelur}/edit', [ProduksiTelurController::class, 'edit'])->name('produksi-telur.edit')->whereNumber('produksiTelur');
+    Route::put('/produksi-telur/{produksiTelur}', [ProduksiTelurController::class, 'update'])->name('produksi-telur.update')->whereNumber('produksiTelur');
+    Route::patch('/produksi-telur/{produksiTelur}', [ProduksiTelurController::class, 'update']);
+    Route::delete('/produksi-telur/{produksiTelur}', [ProduksiTelurController::class, 'destroy'])->name('produksi-telur.destroy')->whereNumber('produksiTelur');
 
-    // Stok Masuk Manual
+    // ----- Penjualan Telur -----
+    Route::get('/penjualan-telur/create', [PenjualanTelurController::class, 'create'])->name('penjualan-telur.create');
+    Route::post('/penjualan-telur', [PenjualanTelurController::class, 'store'])->name('penjualan-telur.store');
+    Route::get('/penjualan-telur/{penjualanTelur}/edit', [PenjualanTelurController::class, 'edit'])->name('penjualan-telur.edit')->whereNumber('penjualanTelur');
+    Route::put('/penjualan-telur/{penjualanTelur}', [PenjualanTelurController::class, 'update'])->name('penjualan-telur.update')->whereNumber('penjualanTelur');
+    Route::patch('/penjualan-telur/{penjualanTelur}', [PenjualanTelurController::class, 'update']);
+    Route::delete('/penjualan-telur/{penjualanTelur}', [PenjualanTelurController::class, 'destroy'])->name('penjualan-telur.destroy')->whereNumber('penjualanTelur');
+
+    // ----- Pemberian Pakan -----
+    Route::get('/pemberian-pakan/create', [PemberianPakanController::class, 'create'])->name('pemberian-pakan.create');
+    Route::post('/pemberian-pakan', [PemberianPakanController::class, 'store'])->name('pemberian-pakan.store');
+    Route::get('/pemberian-pakan/{pemberianPakan}/edit', [PemberianPakanController::class, 'edit'])->name('pemberian-pakan.edit')->whereNumber('pemberianPakan');
+    Route::put('/pemberian-pakan/{pemberianPakan}', [PemberianPakanController::class, 'update'])->name('pemberian-pakan.update')->whereNumber('pemberianPakan');
+    Route::patch('/pemberian-pakan/{pemberianPakan}', [PemberianPakanController::class, 'update']);
+    Route::delete('/pemberian-pakan/{pemberianPakan}', [PemberianPakanController::class, 'destroy'])->name('pemberian-pakan.destroy')->whereNumber('pemberianPakan');
+
+    // ----- Pakan Kandang -----
+    Route::get('/pakan-kandang/create', [PakanKandangController::class, 'create'])->name('pakan-kandang.create');
+    Route::post('/pakan-kandang', [PakanKandangController::class, 'store'])->name('pakan-kandang.store');
+    Route::get('/pakan-kandang/{pakanKandang}/edit', [PakanKandangController::class, 'edit'])->name('pakan-kandang.edit')->whereNumber('pakanKandang');
+    Route::put('/pakan-kandang/{pakanKandang}', [PakanKandangController::class, 'update'])->name('pakan-kandang.update')->whereNumber('pakanKandang');
+    Route::patch('/pakan-kandang/{pakanKandang}', [PakanKandangController::class, 'update']);
+    Route::delete('/pakan-kandang/{pakanKandang}', [PakanKandangController::class, 'destroy'])->name('pakan-kandang.destroy')->whereNumber('pakanKandang');
+
+    // ----- Arus Kas -----
+    Route::get('/arus-kas/create', [ArusKasController::class, 'create'])->name('arus-kas.create');
+    Route::post('/arus-kas', [ArusKasController::class, 'store'])->name('arus-kas.store');
+    Route::get('/arus-kas/{arusKas}/edit', [ArusKasController::class, 'edit'])->name('arus-kas.edit')->whereNumber('arusKas');
+    Route::put('/arus-kas/{arusKas}', [ArusKasController::class, 'update'])->name('arus-kas.update')->whereNumber('arusKas');
+    Route::patch('/arus-kas/{arusKas}', [ArusKasController::class, 'update']);
+    Route::delete('/arus-kas/{arusKas}', [ArusKasController::class, 'destroy'])->name('arus-kas.destroy')->whereNumber('arusKas');
+
+    // ----- Gudang Telur -----
+    Route::get('/gudang-telur/create', [GudangTelurController::class, 'create'])->name('gudang-telur.create');
+    Route::post('/gudang-telur', [GudangTelurController::class, 'store'])->name('gudang-telur.store');
+    Route::get('/gudang-telur/{gudangTelur}/edit', [GudangTelurController::class, 'edit'])->name('gudang-telur.edit')->whereNumber('gudangTelur');
+    Route::put('/gudang-telur/{gudangTelur}', [GudangTelurController::class, 'update'])->name('gudang-telur.update')->whereNumber('gudangTelur');
+    Route::patch('/gudang-telur/{gudangTelur}', [GudangTelurController::class, 'update']);
+    Route::delete('/gudang-telur/{gudangTelur}', [GudangTelurController::class, 'destroy'])->name('gudang-telur.destroy')->whereNumber('gudangTelur');
+
+    // ----- Stok Telur (tulis) -----
     Route::post('/stok-telur/stok', [StokTelurController::class, 'storeStok'])->name('stok-telur.stok.store');
     Route::delete('/stok-telur/stok/{stokMasukTelur}', [StokTelurController::class, 'destroyStok'])->name('stok-telur.stok.destroy');
+    Route::post('/stok-telur/return', [StokTelurController::class, 'storeReturn'])->name('stok-telur.return.store');
+    Route::delete('/stok-telur/return/{returnTelur}', [StokTelurController::class, 'destroyReturn'])->name('stok-telur.return.destroy');
+});
 
-    // Laporan Pakan
+/* =====================================================================
+   2) ADMIN + UMUM — BACA SAJA (index, show, laporan, export)
+   Wildcard {id} diberi whereNumber agar tidak menelan /create
+===================================================================== */
+Route::middleware(['auth', 'role:admin,umum'])->group(function () {
+
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    Route::get('/kandang', [KandangController::class, 'index'])->name('kandang.index');
+    Route::get('/kandang/{kandang}', [KandangController::class, 'show'])->name('kandang.show')->whereNumber('kandang');
+
+    Route::get('/populasi', [PopulasiController::class, 'index'])->name('populasi.index');
+    Route::get('/populasi/{populasi}', [PopulasiController::class, 'show'])->name('populasi.show')->whereNumber('populasi');
+
+    Route::get('/bobot', [BobotAyamController::class, 'index'])->name('bobot.index');
+    Route::get('/bobot/{bobot}', [BobotAyamController::class, 'show'])->name('bobot.show')->whereNumber('bobot');
+
+    Route::get('/produksi-telur', [ProduksiTelurController::class, 'index'])->name('produksi-telur.index');
+    Route::get('/produksi-telur/{produksiTelur}', [ProduksiTelurController::class, 'show'])->name('produksi-telur.show')->whereNumber('produksiTelur');
+
+    Route::get('/penjualan-telur', [PenjualanTelurController::class, 'index'])->name('penjualan-telur.index');
+    Route::get('/penjualan-telur/{penjualanTelur}', [PenjualanTelurController::class, 'show'])->name('penjualan-telur.show')->whereNumber('penjualanTelur');
+
+    Route::get('/pemberian-pakan', [PemberianPakanController::class, 'index'])->name('pemberian-pakan.index');
+    Route::get('/pemberian-pakan/{pemberianPakan}', [PemberianPakanController::class, 'show'])->name('pemberian-pakan.show')->whereNumber('pemberianPakan');
+
+    Route::get('/pakan-kandang', [PakanKandangController::class, 'index'])->name('pakan-kandang.index');
+    Route::get('/pakan-kandang/{pakanKandang}', [PakanKandangController::class, 'show'])->name('pakan-kandang.show')->whereNumber('pakanKandang');
+
+    Route::get('/arus-kas', [ArusKasController::class, 'index'])->name('arus-kas.index');
+    Route::get('/arus-kas/{arusKas}', [ArusKasController::class, 'show'])->name('arus-kas.show')->whereNumber('arusKas');
+
+    Route::get('/gudang-telur', [GudangTelurController::class, 'index'])->name('gudang-telur.index');
+    Route::get('/gudang-telur/{gudangTelur}', [GudangTelurController::class, 'show'])->name('gudang-telur.show')->whereNumber('gudangTelur');
+
+    Route::get('/stok-telur', [StokTelurController::class, 'index'])->name('stok-telur.index');
+
+    // Laporan & export (baca)
     Route::get('/laporan-pakan', [PakanKandangController::class, 'laporan'])->name('pakan.laporan');
     Route::get('/laporan-pakan/export', [PakanKandangController::class, 'exportExcel'])->name('pakan.laporan.export');
-
-    // Arus Kas
-    // Catatan: Route custom seperti /export HARUS diletakkan SEBELUM Route::resource
-    // agar tidak ditangkap sebagai parameter {arusKas}
     Route::get('/arus-kas/export', [ArusKasController::class, 'exportExcel'])->name('arus-kas.export');
-    Route::resource('arus-kas', ArusKasController::class)
-        ->parameters(['arus-kas' => 'arusKas']);
-
-    // Laporan harian (rekap kiriman man power)
     Route::get('/admin/laporan', [LaporanHarianController::class, 'index'])->name('admin.laporan.index');
 });
 
-/* ========== KHUSUS MAN POWER ========== */
+/* ========== 3) KHUSUS MAN POWER ========== */
 Route::middleware(['auth', 'role:manpower'])->group(function () {
     Route::get('/manpower/laporan', [LaporanHarianController::class, 'create'])->name('manpower.laporan.create');
     Route::post('/manpower/laporan', [LaporanHarianController::class, 'store'])->name('manpower.laporan.store');
@@ -1551,6 +1639,70 @@ class StokTelurController extends Controller
 }
 
 
+===== C:\xampp\htdocs\peternakan_ayam\app\Http\Controllers\UmumController.php =====
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Kandang;
+use App\Models\Populasi;
+use App\Models\ProduksiTelur;
+use App\Models\PenjualanTelur;
+use App\Models\PakanKandang;
+use App\Models\LaporanHarian;
+
+class UmumController extends Controller
+{
+    public function index()
+    {
+        $totalKandang = Kandang::count();
+        $totalAyam = Populasi::orderByDesc('tanggal')->orderByDesc('id')
+            ->get()->unique('kandang_id')->sum('sisa');
+        $totalTelur = (int) ProduksiTelur::sum('jumlah_produksi');
+        $totalPenjualan = (int) PenjualanTelur::sum('total');
+
+        $produksiTerbaru = ProduksiTelur::with('kandang')->latest('tanggal')->latest('id')->limit(10)->get();
+        $penjualanTerbaru = PenjualanTelur::latest('tanggal')->latest('id')->limit(10)->get();
+
+        return view('umum.home', compact(
+            'totalKandang', 'totalAyam', 'totalTelur', 'totalPenjualan',
+            'produksiTerbaru', 'penjualanTerbaru'
+        ));
+    }
+
+    public function populasi()
+    {
+        $populasis = Populasi::with('kandang')->latest('tanggal')->latest('id')->get();
+        return view('umum.populasi', compact('populasis'));
+    }
+
+    public function produksi()
+    {
+        $produksis = ProduksiTelur::with('kandang')->latest('tanggal')->latest('id')->get();
+        return view('umum.produksi', compact('produksis'));
+    }
+
+    public function penjualan()
+    {
+        $penjualans = PenjualanTelur::latest('tanggal')->latest('id')->get();
+        return view('umum.penjualan', compact('penjualans'));
+    }
+
+    public function pakan()
+    {
+        $pakans = PakanKandang::with('kandang')->latest('tanggal')->latest('id')->get();
+        $stokKg = PakanKandang::stokKg();
+        return view('umum.pakan', compact('pakans', 'stokKg'));
+    }
+
+    public function laporan()
+    {
+        $laporans = LaporanHarian::with(['kandang', 'user'])->latest('tanggal')->latest('id')->get();
+        return view('umum.laporan', compact('laporans'));
+    }
+}
+
+
 ===== C:\xampp\htdocs\peternakan_ayam\app\Http\Controllers\Auth\AuthenticatedSessionController.php =====
 <?php
 
@@ -1575,11 +1727,7 @@ class AuthenticatedSessionController extends Controller
         $request->authenticate();
         $request->session()->regenerate();
 
-        return redirect(
-            $request->user()->role === 'admin'
-                ? route('dashboard')
-                : route('manpower.laporan.create')
-        );
+        return redirect()->intended($this->redirectByRole($request->user()));
     }
 
     public function destroy(Request $request): RedirectResponse
@@ -1587,8 +1735,17 @@ class AuthenticatedSessionController extends Controller
         Auth::guard('web')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
-
         return redirect('/');
+    }
+
+    protected function redirectByRole($user): string
+    {
+        return match ($user->role ?? '') {
+            'admin'    => route('dashboard'),
+            'umum'     => route('dashboard'),   // ✅ umum juga masuk dashboard
+            'manpower' => route('manpower.laporan.create'),
+            default    => route('landing'),
+        };
     }
 }
 
@@ -2036,16 +2193,12 @@ use Symfony\Component\HttpFoundation\Response;
 
 class RoleMiddleware
 {
-    public function handle(
-        Request $request,
-        Closure $next,
-        string $role
-    ): Response {
-        if (!auth()->check()) {
-            return redirect()->route('login');
-        }
-
-        if (auth()->user()->role !== $role) {
+    /**
+     * Support: role:admin | role:admin,umum | role:umum | role:admin,manpower
+     */
+    public function handle(Request $request, Closure $next, string ...$roles): Response
+    {
+        if (! $request->user() || ! in_array($request->user()->role, $roles, true)) {
             abort(403, 'Anda tidak memiliki akses ke halaman ini.');
         }
 
@@ -3970,7 +4123,7 @@ new Chart(document.getElementById('mortalityChart'), {
         if (el) {
             setTimeout(function () {
                 el.scrollIntoView({ behavior: 'auto', block: 'start' });
-            }, 60); 
+            }, 60);
         }
     }
 })();
@@ -3984,21 +4137,21 @@ new Chart(document.getElementById('mortalityChart'), {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BukanAyam — Sistem Manajemen Peternakan Ayam | Desa Tanjung Agung</title>
+<title>Sistem Manajemen Peternakan Ayam | Desa Tanjung Agung</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 :root{
---coklat-900:#2d1b16; --coklat-800:#3e2723; --coklat-700:#4e342e;
---coklat-600:#5d4037; --coklat-500:#6d4c41; --coklat-400:#8d6e63;
---krem:#f7f2ea; --krem-2:#efe6d9; --aksen:#d7a86e;
---teks-terang:#ffe9c9;
+--navy-900:#152a45; --navy-800:#1e3a5f; --navy-700:#2c5282;
+--navy-600:#3b82f6; --navy-500:#60a5fa; --navy-400:#93c5fd;
+--background:#f0f4f8; --background-2:#e2e8f0; --aksen:#3b82f6;
+--teks-terang:#ffffff;
 }
 html{scroll-behavior:smooth}
-body{font-family:'Inter',sans-serif;background:var(--krem);color:#33261f;margin:0}
+body{font-family:'Inter',sans-serif;background:var(--background);color:#1a202c;margin:0}
 
-/* ================= NAVBAR ================= */
+/* ===== NAVBAR ===== */
 .nav-landing{
 position:fixed; top:0; left:0; right:0; z-index:1030;
 background:transparent;
@@ -4007,191 +4160,232 @@ transition: background .35s ease, border-color .35s ease, backdrop-filter .35s e
 padding: 18px 0;
 }
 .nav-landing .container{padding:0 24px}
-.nav-landing .navbar-brand{
-display:flex; align-items:center; gap:10px;
-text-decoration:none;
-}
-.nav-logo{
-height: 46px;
-width: auto;
-object-fit: contain;
-display: block;
-background: transparent;
-border: none;
-box-shadow: none;
-border-radius: 0;
-padding: 0;
-}
-.nav-landing.scrolled .nav-logo{ height: 38px; }
-.brand-divider{
-width: 1px;
-height: 32px;
-background: currentColor;
-opacity: .25;
-margin: 0 12px;
-}
+.nav-landing .navbar-brand{display:flex; align-items:center; gap:10px; text-decoration:none;}
+.brand-logos{display:flex;align-items:center;gap:12px;}
+.nav-logo{height:46px;width:auto;object-fit:contain;display:block;background:transparent;border:none;box-shadow:none;border-radius:0;padding:0}
+.nav-logo-pkn{height:42px;background:transparent;border-radius:0;padding:0;box-shadow:none;}
+.nav-landing.scrolled .nav-logo{height:38px}
+.nav-landing.scrolled .nav-logo-pkn{height:34px}
 .brand-egg{
 width:40px;height:40px;border-radius:10px;
-background:linear-gradient(135deg,var(--coklat-500),var(--coklat-400));
-display:none;
-align-items:center;justify-content:center;
-color:#ffe9c9;font-size:20px;
-box-shadow: 0 4px 12px rgba(0,0,0,.25);
+background:linear-gradient(135deg,var(--navy-800),var(--navy-700));
+display:none;align-items:center;justify-content:center;
+color:#fff;font-size:20px;box-shadow:0 4px 12px rgba(0,0,0,.25);
 }
 .brand-egg i{display:inline-block;animation:wobble 2.6s ease-in-out infinite}
-.brand-text{
-font-weight: 800;
-font-size: 20px;
-letter-spacing: 0.3px;
-}
-.nav-landing .brand-text,
-.nav-landing .navbar-brand{
-color: var(--teks-terang);
-text-shadow: 0 2px 10px rgba(0,0,0,.45);
-}
-.nav-landing .nav-links a{
-color: var(--teks-terang);
-text-decoration:none;
-font-size:14px;
-font-weight:600;
-margin-left:22px;
-text-shadow: 0 1px 6px rgba(0,0,0,.4);
-transition: color .2s, transform .2s;
-display:inline-block;
-}
-.nav-landing .nav-links a:hover{
-color: #fff;
-transform: translateY(-1px);
-}
+.nav-landing .nav-links a{color:var(--teks-terang);text-decoration:none;font-size:14px;font-weight:600;margin-left:22px;text-shadow:0 1px 6px rgba(0,0,0,.4);transition:color .2s,transform .2s;display:inline-block}
+.nav-landing .nav-links a:hover{color:#fff;transform:translateY(-1px)}
 .nav-landing.scrolled{
-background: rgba(45, 27, 22, 0.85);
-backdrop-filter: blur(14px) saturate(140%);
--webkit-backdrop-filter: blur(14px) saturate(140%);
-border-bottom: 1px solid rgba(255,255,255,0.08);
-padding: 10px 0;
-box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+background:rgba(21,42,69,.9);
+backdrop-filter:blur(14px) saturate(140%);
+-webkit-backdrop-filter:blur(14px) saturate(140%);
+border-bottom:1px solid rgba(255,255,255,.08);
+padding:10px 0;box-shadow:0 8px 24px rgba(0,0,0,.18);
 }
-.nav-landing.scrolled .brand-text{
-color: #fff;
-text-shadow: none;
-transform: scale(.97);
-transform-origin: left center;
-transition: transform .3s ease;
-}
-.nav-landing.scrolled .nav-links a{
-color: rgba(255,255,255,.9);
-text-shadow: none;
-}
-.nav-landing.scrolled .nav-links a:hover{ color:#fff; }
-.nav-spacer{height:80px}
-.btn-cta{background:var(--aksen);color:var(--coklat-900);font-weight:700;border:none;padding:8px 18px}
-.btn-cta:hover{background:#c6935a;color:var(--coklat-900)}
-.btn-ghost{border:1px solid rgba(255,255,255,.55);color:var(--teks-terang);padding:8px 18px;font-weight:600}
-.btn-ghost:hover{background:rgba(255,255,255,.15);color:#fff}
+.nav-landing.scrolled .nav-links a{color:rgba(255,255,255,.9);text-shadow:none}
+.nav-landing.scrolled .nav-links a:hover{color:#fff}
+.btn-cta{background:var(--aksen);color:#fff;font-weight:700;border:none;padding:8px 18px}
+.btn-cta:hover{background:#2563eb;color:#fff}
 
-/* ================= HERO ================= */
-.hero{
-background:linear-gradient(135deg,var(--coklat-900) 0%,var(--coklat-700) 60%,var(--coklat-500) 100%);
-color:#fff;overflow:hidden;position:relative;
-padding: 100px 0 150px;
+/* ===== HERO DENGAN GAMBAR BACKGROUND ===== */
+.hero-new{
+position:relative;
+min-height:640px;
+display:flex;
+align-items:center;
+background:
+linear-gradient(90deg, rgba(21,42,69,.95) 0%, rgba(21,42,69,.75) 45%, rgba(21,42,69,.15) 100%),
+url("{{ asset('gambar1.jpeg') }}") center/cover no-repeat;
+color:#fff;
+padding:140px 0 80px;
+overflow:hidden;
 }
-.hero::before{
-content:"";position:absolute;inset:0;
-background: radial-gradient(circle at 20% 30%, rgba(215,168,110,.15), transparent 40%),
-radial-gradient(circle at 80% 70%, rgba(215,168,110,.10), transparent 40%);
+.hero-new::before{
+content:"";
+position:absolute;
+top:0; left:0; right:0; bottom:0;
+background:radial-gradient(circle at 80% 50%, rgba(59,130,246,.15), transparent 50%);
 pointer-events:none;
 }
-.hero-badge{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#ffe9c9}
-.stage{position:relative;min-height:440px}
-.egg{position:absolute;background:linear-gradient(180deg,#fff8ee,#e8d5bd);border-radius:50% 50% 50% 50%/60% 60% 40% 40%;box-shadow:0 16px 28px rgba(0,0,0,.28)}
-.egg.s1{width:64px;height:80px;left:6%;top:30px;animation:float 3.2s .3s ease-in-out infinite}
-.egg.s2{width:46px;height:58px;right:8%;top:20px;animation:float 3.6s .8s ease-in-out infinite}
-.egg.s3{width:54px;height:68px;right:18%;bottom:60px;animation:float 3s 1.2s ease-in-out infinite}
-.chicken-wrap{
-position:absolute;left:50%;top:50%;
-transform:translate(-50%,-50%);
-width: 320px; height: 320px;
+.hero-new .container{position:relative;z-index:1}
+.hero-new .badge-top{
+display:inline-flex;align-items:center;gap:8px;
+background:rgba(255,255,255,.15);
+border:1px solid rgba(255,255,255,.3);
+color:#fff;
+padding:8px 16px;
+border-radius:30px;
+font-size:13px;font-weight:600;
+margin-bottom:24px;
 }
-.chicken-wrap svg{width:100%;height:100%;overflow:visible}
-.ch-body{transform-origin:50% 100%;animation:bodyBounce 1.4s ease-in-out infinite}
-.ch-head{transform-origin:50% 100%;animation:headNod 2s ease-in-out infinite}
-.ch-wing-left{transform-origin:90% 30%;animation:flapL 0.9s ease-in-out infinite}
-.ch-wing-right{transform-origin:10% 30%;animation:flapR 0.9s ease-in-out infinite}
-.ch-tail{transform-origin:50% 80%;animation:tailWag 1.8s ease-in-out infinite}
-.ch-comb{transform-origin:50% 100%;animation:combWiggle 1.4s ease-in-out infinite}
-.ch-eye{transform-origin:center;animation:blink 4s infinite}
-.ch-beak{transform-origin:50% 30%;animation:beakTalk 2.4s ease-in-out infinite}
-.ch-egg-drop{transform-origin:center;animation: eggDrop 3.5s ease-in infinite;opacity:0;}
-.grass{transform-origin:bottom center;animation:grassSway 3s ease-in-out infinite}
-
-@keyframes bodyBounce{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-8px) rotate(1deg)}}
-@keyframes headNod{0%,100%{transform:translateY(0) rotate(0)}25%{transform:translateY(-3px) rotate(-6deg)}75%{transform:translateY(-1px) rotate(5deg)}}
-@keyframes flapL{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(-35deg)}}
-@keyframes flapR{0%,100%{transform:rotate(5deg)}50%{transform:rotate(35deg)}}
-@keyframes tailWag{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(6deg)}}
-@keyframes combWiggle{0%,100%{transform:rotate(0)}50%{transform:rotate(3deg)}}
-@keyframes blink{0%, 92%, 100%{transform:scaleY(1)}95%{transform:scaleY(0.1)}}
-@keyframes beakTalk{0%,40%,100%{transform:rotate(0)}45%{transform:rotate(8deg)}55%{transform:rotate(-3deg)}65%{transform:rotate(5deg)}}
-@keyframes eggDrop{0%{transform:translate(0,0) scale(.6);opacity:0}15%{transform:translate(0,0) scale(.9);opacity:1}70%{transform:translate(-20px,120px) scale(1);opacity:1}90%{transform:translate(-25px,150px) scale(1.05);opacity:.7}100%{transform:translate(-30px,170px) scale(.8);opacity:0}}
-@keyframes grassSway{0%,100%{transform:skewX(-2deg)}50%{transform:skewX(3deg)}}
-@keyframes float{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-16px) rotate(2deg)}}
-@keyframes wobble{0%,100%{transform:rotate(0)}25%{transform:rotate(-10deg)}75%{transform:rotate(10deg)}}
-
-/* ================= ✅ PEMBATAS GELOMBANG HIDUP ================= */
-.wave-divider{
-position: relative;
-height: 120px;
-margin-top: -120px;          /* menimpa bagian bawah hero */
-overflow: hidden;
-pointer-events: none;
-z-index: 5;
+.hero-new h1{
+font-size:52px;
+font-weight:900;
+line-height:1.1;
+margin-bottom:20px;
+letter-spacing:-0.5px;
 }
-.wave-layer{ position:absolute; inset:0; }
-.wave-layer svg{
-position:absolute; bottom:0; left:0;
-width:200%; height:100%;
+.hero-new h1 span{color:var(--navy-500)}
+.hero-new p{
+font-size:16px;
+opacity:.9;
+line-height:1.6;
+max-width:540px;
+margin-bottom:32px;
+}
+.hero-new .hero-btns{display:flex;gap:14px;flex-wrap:wrap}
+.btn-hero-primary{
+background:var(--aksen);
+color:#fff;
+border:none;
+padding:14px 28px;
+border-radius:10px;
+font-weight:700;
+font-size:14px;
+text-decoration:none;
+display:inline-flex;align-items:center;gap:8px;
+transition:.2s;
+}
+.btn-hero-primary:hover{background:#2563eb;color:#fff;transform:translateY(-2px);box-shadow:0 8px 20px rgba(59,130,246,.4)}
+.btn-hero-outline{
+background:transparent;
+color:#fff;
+border:2px solid rgba(255,255,255,.5);
+padding:12px 26px;
+border-radius:10px;
+font-weight:700;
+font-size:14px;
+text-decoration:none;
+display:inline-flex;align-items:center;gap:8px;
+transition:.2s;
+}
+.btn-hero-outline:hover{background:rgba(255,255,255,.1);border-color:#fff;color:#fff}
+
+/* ===== SECTION KANDANG ===== */
+.kandang-section{
+padding:80px 0;
+background:#fff;
+}
+.section-label{
+font-size:12px;
+font-weight:700;
+letter-spacing:1.5px;
+text-transform:uppercase;
+color:var(--aksen);
+margin-bottom:10px;
+}
+.section-title{
+font-size:32px;
+font-weight:800;
+color:var(--navy-900);
+margin-bottom:14px;
+}
+.section-subtitle{
+font-size:15px;
+color:#718096;
+margin-bottom:48px;
+max-width:620px;
+}
+.kandang-card{
+background:#fff;
+border:1px solid var(--background-2);
+border-radius:20px;
+overflow:hidden;
+transition:.3s;
+height:100%;
+}
+.kandang-card:hover{
+transform:translateY(-6px);
+box-shadow:0 20px 40px rgba(30,58,95,.12);
+border-color:var(--aksen);
+}
+.kandang-img-wrap{
+position:relative;
+height:280px;
+overflow:hidden;
+background:var(--background);
+}
+.kandang-img-wrap img{
+width:100%;
+height:100%;
+object-fit:cover;
+transition:transform .5s ease;
+}
+.kandang-card:hover .kandang-img-wrap img{transform:scale(1.06)}
+.kandang-body{padding:24px}
+.kandang-body h3{
+font-size:20px;
+font-weight:800;
+color:var(--navy-900);
+margin-bottom:10px;
+}
+.kandang-body p{
+font-size:14px;
+color:#718096;
+line-height:1.6;
+margin-bottom:18px;
+}
+.kandang-stats{
+display:grid;
+grid-template-columns:1fr;
+gap:12px;
+padding-top:16px;
+border-top:1px solid var(--background-2);
+}
+.kandang-stat{
+text-align:center;
+}
+.kandang-stat .val{
+font-size:18px;
+font-weight:800;
+color:var(--navy-900);
 display:block;
 }
-/* 3 layer: beda kecepatan & arah biar terlihat "hidup" */
-.wl-back  { animation: waveBob 7s ease-in-out infinite; }
-.wl-back svg  { fill: var(--krem); opacity:.30; animation: waveMove 26s linear infinite; }
-.wl-mid   { animation: waveBob 5.5s ease-in-out infinite .6s; }
-.wl-mid svg   { fill: var(--krem); opacity:.55; animation: waveMove 17s linear infinite reverse; }
-.wl-front { animation: waveBob 4.5s ease-in-out infinite .3s; }
-.wl-front svg { fill: var(--krem); opacity:1;  animation: waveMove 11s linear infinite; }
-@keyframes waveMove{ from{ transform: translateX(0); } to{ transform: translateX(-50%); } }
-@keyframes waveBob{ 0%,100%{ transform: translateY(0); } 50%{ transform: translateY(7px); } }
+.kandang-stat .lbl{
+font-size:11px;
+color:#718096;
+text-transform:uppercase;
+letter-spacing:.5px;
+}
 
-.section-title{font-weight:800}
-.feature-card{background:#fff;border:1px solid #e6dacc;border-radius:16px;padding:24px;height:100%;transition:.2s}
-.feature-card:hover{transform:translateY(-4px);box-shadow:0 12px 26px rgba(93,64,55,.14)}
-.feature-icon{width:48px;height:48px;border-radius:12px;background:var(--krem-2);color:var(--coklat-600);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:14px}
-.about{background:var(--krem-2)}
-.check-item i{color:var(--coklat-500)}
-footer{background:var(--coklat-900);color:#cbb5a8}
+/* ===== TENTANG ===== */
+.about{background:var(--background)}
+.check-item i{color:var(--navy-600)}
+.feature-card{background:#fff;border:1px solid var(--background-2);border-radius:16px;padding:24px;height:100%;transition:.2s}
+.feature-card:hover{transform:translateY(-4px);box-shadow:0 12px 26px rgba(30,58,95,.14)}
+.feature-icon{width:48px;height:48px;border-radius:12px;background:var(--background-2);color:var(--navy-700);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:14px}
+
+/* ===== FOOTER ===== */
+footer{background:var(--navy-900);color:#cbd5e1}
+
+@keyframes wobble{0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); }}
+
 @media (max-width:991px){
-.chicken-wrap{width:240px;height:240px}
-.stage{min-height:340px}
+.hero-new{min-height:auto;padding:120px 0 60px;background-position:center}
+.hero-new h1{font-size:36px}
 .nav-landing .nav-links{display:none}
-.brand-text{font-size:17px}
-.wave-divider{height:80px;margin-top:-80px}
+.section-title{font-size:26px}
+.kandang-img-wrap{height:220px}
+.nav-logo{height:36px}
+.nav-logo-pkn{height:32px}
 }
 </style>
 </head>
 <body>
-
-<!-- NAVBAR -->
 <nav class="nav-landing" id="navLanding">
 <div class="container d-flex align-items-center justify-content-between">
 <a href="{{ url('/') }}" class="navbar-brand">
-<img src="{{ asset('logo.png') }}" alt="Logo Perusahaan" class="nav-logo"
-onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-flex';">
+<span class="brand-logos">
+<img src="{{ asset('logo.png') }}" alt="Logo" class="nav-logo"
+onerror="this.style.display='none'; this.parentElement.querySelector('.brand-egg').style.display='flex';">
+<img src="{{ asset('logopkn.png') }}" alt="Logo PKN" class="nav-logo nav-logo-pkn"
+onerror="this.style.display='none';">
 <span class="brand-egg"><i class="bi bi-egg-fried"></i></span>
-<span class="brand-divider"></span>
-<span class="brand-text">BukanAyam</span>
+</span>
 </a>
 <div class="nav-links d-none d-md-block">
 <a href="#tentang">Tentang</a>
+<a href="#kandang">Kandang</a>
 </div>
 <div>
 @auth
@@ -4206,129 +4400,87 @@ Masuk <i class="bi bi-box-arrow-in-right ms-1"></i>
 </div>
 </div>
 </nav>
-<div class="nav-spacer"></div>
 
-<!-- HERO -->
-<header class="hero">
+{{-- ===== HERO DENGAN GAMBAR BACKGROUND ===== --}}
+<header class="hero-new">
 <div class="container">
-<div class="row align-items-center g-4">
-<div class="col-lg-6">
-<span class="badge hero-badge rounded-pill px-3 py-2 mb-3">
-<i class="bi bi-geo-alt-fill me-1"></i> Desa Tanjung Agung
+<div class="row align-items-center">
+<div class="col-lg-7">
+<span class="badge-top">
+<i class="bi bi-geo-alt-fill"></i> Desa Tanjung Agung
 </span>
-<h1 class="display-5 fw-bold lh-sm mb-3">
-Kelola Peternakan Ayam Jadi <span style="color:var(--aksen)">Lebih Mudah</span>
-</h1>
-<p class="lead mb-4" style="color:#e8d9c8">
-Aplikasi BukanAyam dikembangkan dengan dukungan PT Pesona Khatulistiwa Nusantara (PKN), perusahaan yang berkomitmen pada digitalisasi dan pemberdayaan masyarakat desa. Kehadiran PKN membantu peternak ayam di Desa Tanjung Agung beralih dari pencatatan manual ke sistem terintegrasi — populasi, produksi telur, penjualan, hingga pakan tercatat akurat dan dapat dipantau kapan saja.
+<h1>Pengelola Peternakan Ayam</h1>
+<p>
+Sistem Manajemen Peternakan Ayam dikembangkan dengan dukungan PT Pesona Khatulistiwa Nusantara (PKN), perusahaan yang berkomitmen pada digitalisasi dan pemberdayaan masyarakat desa. Kehadiran PKN membantu peternak ayam di Desa Tanjung Agung beralih dari pencatatan manual ke sistem terintegrasi.
 </p>
-</div>
-<div class="col-lg-6 d-none d-lg-block">
-<div class="stage">
-<div class="egg s1"></div>
-<div class="egg s2"></div>
-<div class="egg s3"></div>
-<div class="chicken-wrap">
-<svg viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg">
-<g class="grass">
-<path d="M40 290 Q60 270 80 290 Q100 270 120 290 Q140 270 160 290 Q180 270 200 290 Q220 270 240 290 Q260 270 280 290" stroke="#5d8a4a" stroke-width="4" fill="none" stroke-linecap="round"/>
-<path d="M50 295 L50 280 M90 295 L90 278 M130 295 L130 282 M170 295 L170 278 M210 295 L210 280 M250 295 L250 278" stroke="#6fa05a" stroke-width="2" stroke-linecap="round"/>
-</g>
-<ellipse cx="160" cy="285" rx="70" ry="8" fill="rgba(0,0,0,.25)"/>
-<g class="ch-body">
-<g class="ch-tail">
-<path d="M230 200 Q275 160 270 110 Q255 140 240 155 Q255 120 245 95 Q230 130 220 150 Q225 115 215 100 Q205 140 210 175 Z" fill="#5d4037"/>
-<path d="M232 195 Q265 160 260 120" stroke="#3e2723" stroke-width="2" fill="none"/>
-</g>
-<g>
-<line x1="140" y1="250" x2="135" y2="285" stroke="#f4b400" stroke-width="5" stroke-linecap="round"/>
-<line x1="180" y1="250" x2="185" y2="285" stroke="#f4b400" stroke-width="5" stroke-linecap="round"/>
-<path d="M125 285 L135 285 L145 285 M135 285 L135 295" stroke="#f4b400" stroke-width="4" stroke-linecap="round" fill="none"/>
-<path d="M175 285 L185 285 L195 285 M185 285 L185 295" stroke="#f4b400" stroke-width="4" stroke-linecap="round" fill="none"/>
-</g>
-<ellipse cx="160" cy="210" rx="75" ry="55" fill="#c9a27a"/>
-<ellipse cx="160" cy="215" rx="70" ry="50" fill="#d7b58f"/>
-<ellipse cx="150" cy="230" rx="40" ry="25" fill="#e8cfa8" opacity=".7"/>
-<g class="ch-wing-left">
-<path d="M210 180 Q250 190 245 230 Q230 215 215 220 Q225 205 210 195 Z" fill="#a0764f"/>
-<path d="M215 190 Q235 200 232 220" stroke="#7d5a3a" stroke-width="1.5" fill="none"/>
-</g>
-<g class="ch-wing-right">
-<path d="M110 180 Q70 190 75 230 Q90 215 105 220 Q95 205 110 195 Z" fill="#a0764f"/>
-<path d="M105 190 Q85 200 88 220" stroke="#7d5a3a" stroke-width="1.5" fill="none"/>
-</g>
-<g class="ch-head">
-<path d="M145 175 Q160 165 175 175 L175 200 L145 200 Z" fill="#d7b58f"/>
-<g class="ch-comb">
-<path d="M140 105 Q145 85 150 100 Q155 80 160 100 Q165 82 170 100 Q175 85 180 108 Q165 115 140 110 Z" fill="#d93636"/>
-<path d="M142 108 Q150 95 160 105 Q170 95 178 108" stroke="#a02020" stroke-width="1" fill="none"/>
-</g>
-<circle cx="160" cy="130" r="38" fill="#d7b58f"/>
-<circle cx="160" cy="132" r="34" fill="#e8cfa8"/>
-<circle cx="140" cy="138" r="6" fill="#f4b8b8" opacity=".7"/>
-<g>
-<circle cx="148" cy="125" r="6" fill="#fff"/>
-<circle cx="148" cy="125" r="4" fill="#2d1b16"/>
-<circle cx="149" cy="124" r="1.5" fill="#fff"/>
-<ellipse class="ch-eye" cx="148" cy="125" rx="6" ry="6" fill="#d7b58f" transform="scaleY(0)"/>
-</g>
-<g>
-<circle cx="172" cy="125" r="6" fill="#fff"/>
-<circle cx="172" cy="125" r="4" fill="#2d1b16"/>
-<circle cx="173" cy="124" r="1.5" fill="#fff"/>
-<ellipse class="ch-eye" cx="172" cy="125" rx="6" ry="6" fill="#d7b58f" transform="scaleY(0)"/>
-</g>
-<g class="ch-beak">
-<path d="M155 140 L165 140 L160 158 Z" fill="#f4b400"/>
-<path d="M155 140 L165 140" stroke="#c79000" stroke-width="1"/>
-<path d="M157 148 L163 148" stroke="#c79000" stroke-width=".5"/>
-</g>
-<path d="M155 155 Q160 172 165 155 Q163 165 160 165 Q157 165 155 155 Z" fill="#d93636"/>
-</g>
-<g class="ch-egg-drop">
-<ellipse cx="160" cy="260" rx="10" ry="13" fill="#fff8ee" stroke="#e8d5bd" stroke-width="1"/>
-<ellipse cx="158" cy="257" rx="3" ry="4" fill="#fff" opacity=".7"/>
-</g>
-</g>
-</svg>
+<div class="hero-btns">
+<a href="#kandang" class="btn-hero-primary">
+Lihat Kandang <i class="bi bi-arrow-right"></i>
+</a>
+<a href="#tentang" class="btn-hero-outline">
+Tentang Kami <i class="bi bi-chevron-right"></i>
+</a>
 </div>
 </div>
 </div>
 </div>
 </header>
 
-{{-- ===== ✅ PEMBATAS GELOMBANG HIDUP (hero → konten) ===== --}}
-<div class="wave-divider" aria-hidden="true">
-<div class="wave-layer wl-back">
-<svg viewBox="0 0 2880 140" preserveAspectRatio="none">
-<path d="M0,60 C240,100 480,100 720,60 C960,20 1200,20 1440,60 C1680,100 1920,100 2160,60 C2400,20 2640,20 2880,60 L2880,140 L0,140 Z"/>
-</svg>
+{{-- ===== SECTION KANDANG ===== --}}
+<section id="kandang" class="kandang-section">
+<div class="container">
+<div class="text-center">
+<div class="section-title">Kandang Kami</div>
 </div>
-<div class="wave-layer wl-mid">
-<svg viewBox="0 0 2880 140" preserveAspectRatio="none">
-<path d="M0,70 C240,30 480,30 720,70 C960,110 1200,110 1440,70 C1680,30 1920,30 2160,70 C2400,110 2640,110 2880,70 L2880,140 L0,140 Z"/>
-</svg>
+<div class="row g-4">
+{{-- KANDANG 1 --}}
+<div class="col-md-6">
+<div class="kandang-card">
+<div class="kandang-img-wrap">
+<img src="{{ asset('kandang1.jpeg') }}" alt="Kandang 1">
 </div>
-<div class="wave-layer wl-front">
-<svg viewBox="0 0 2880 140" preserveAspectRatio="none">
-<path d="M0,80 C240,120 480,120 720,80 C960,40 1200,40 1440,80 C1680,120 1920,120 2160,80 C2400,40 2640,40 2880,80 L2880,140 L0,140 Z"/>
-</svg>
+<div class="kandang-body">
+<h3>Kandang 1</h3>
+<p>Kandang utama dengan kapasitas besar, dilengkapi sistem ventilasi dan pencahayaan yang optimal untuk kesehatan ayam.</p>
+<div class="kandang-stats">
+<div class="kandang-stat">
+<span class="val">Aktif</span>
+<span class="lbl">Status</span>
 </div>
 </div>
-
+</div>
+</div>
+</div>
+{{-- KANDANG 2 --}}
+<div class="col-md-6">
+<div class="kandang-card">
+<div class="kandang-img-wrap">
+<img src="{{ asset('kandang2.jpeg') }}" alt="Kandang 2">
+</div>
+<div class="kandang-body">
+<h3>Kandang 2</h3>
+<p>Kandang pendukung dengan desain ergonomis, menjaga kebersihan dan kenyamanan ayam untuk produksi telur maksimal.</p>
+<div class="kandang-stats">
+<div class="kandang-stat">
+<span class="val">Aktif</span>
+<span class="lbl">Status</span>
+</div>
+</div>
+</div>
+</div>
 </div>
 </div>
 </div>
 </section>
 
-<!-- TENTANG -->
+{{-- ===== TENTANG ===== --}}
 <section id="tentang" class="about py-5">
 <div class="container py-4">
 <div class="row align-items-center g-4">
 <div class="col-lg-6">
-<h2 class="section-title mb-3">Tentang Aplikasi</h2>
+<div class="section-label">Tentang Aplikasi</div>
 <p class="mb-3">
-BukanAyam dibangun untuk membantu peternakan ayam di
+Aplikasi ini dibangun untuk membantu peternakan ayam di
 <strong>Desa Tanjung Agung</strong> mencatat dan mengelola data peternakan
 secara digital. Data yang sebelumnya tersebar di buku catatan — populasi
 ayam, produksi telur, penjualan, sampai pemakaian pakan — kini terkumpul
@@ -4343,16 +4495,14 @@ dalam satu sistem yang bisa diakses kapan saja.
 </div>
 <div class="col-lg-6">
 <div class="feature-card text-center p-5">
-<div class="feature-icon mx-auto" style="width:70px;height:70px;font-size:32px">
-<i class="bi bi-egg-fried"></i>
-</div>
-<h4 class="fw-bold mt-3">BukanAyam</h4>
-<p class="text-muted small mb-4">Sistem Manajemen Peternakan Ayam</p>
-<div class="d-flex justify-content-center gap-2 flex-wrap">
-<span class="badge rounded-pill" style="background:var(--krem-2);color:var(--coklat-600)">
+<img src="{{ asset('logo.png') }}" alt="Logo" style="width:70px;height:70px;object-fit:contain;margin-bottom:16px;"
+onerror="this.style.display='none';">
+<p class="text-muted small mb-0 mt-3">Sistem Manajemen Peternakan Ayam</p>
+<div class="d-flex justify-content-center gap-2 flex-wrap mt-3">
+<span class="badge rounded-pill" style="background:var(--background-2);color:var(--navy-700)">
 <i class="bi bi-geo-alt me-1"></i>Desa Tanjung Agung
 </span>
-<span class="badge rounded-pill" style="background:var(--krem-2);color:var(--coklat-600)">
+<span class="badge rounded-pill" style="background:var(--background-2);color:var(--navy-700)">
 <i class="bi bi-calendar3 me-1"></i>{{ date('Y') }}
 </span>
 </div>
@@ -4364,7 +4514,7 @@ dalam satu sistem yang bisa diakses kapan saja.
 
 <footer class="py-4">
 <div class="container d-flex flex-wrap justify-content-between gap-2 small">
-<span><i class="bi bi-egg-fried me-1"></i> BukanAyam — Desa Tanjung Agung</span>
+<span><i class="bi bi-egg-fried me-1"></i> Desa Tanjung Agung</span>
 <span>© {{ date('Y') }} Sistem Manajemen Peternakan Ayam</span>
 </div>
 </footer>
@@ -5128,114 +5278,100 @@ onScroll();
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root {
-  --primary: #6d4c41;
-  --primary-dark: #5d4037;
-  --krem: #f7f2ea;
-  --krem-2: #efe6d9;
-  --aksen: #d7a86e;
-  --text: #33261f;
-  --muted: #8a7a6e;
-  --border: #e6dacc;
+--primary: #1e3a5f;
+--primary-dark: #152a45;
+--krem: #f0f4f8;
+--krem-2: #e2e8f0;
+--aksen: #3b82f6;
+--text: #1a202c;
+--muted: #718096;
+--border: #e2e8f0;
 }
 * { box-sizing: border-box; }
 body {
-  margin: 0;
-  font-family: 'Inter', sans-serif;
-  min-height: 100vh;
-  display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, #fdf9f0 0%, var(--krem) 45%, var(--krem-2) 75%, #e8d5bd 100%);
-  color: var(--text);
+margin: 0;
+font-family: 'Inter', sans-serif;
+min-height: 100vh;
+display: flex; align-items: center; justify-content: center;
+background: linear-gradient(135deg, #f0f4f8 0%, var(--krem) 45%, var(--krem-2) 75%, #cbd5e1 100%);
+color: var(--text);
 }
 .login-wrap { width: 100%; max-width: 430px; padding: 24px; text-align: center; }
-
-/* ===== IKON ===== */
 .login-icon {
-  color: var(--primary);
-  font-size: 108px; line-height: 1; margin-bottom: 30px;
-  filter: drop-shadow(0 6px 14px rgba(93,64,55,.25));
+color: var(--primary);
+font-size: 108px; line-height: 1; margin-bottom: 30px;
+filter: drop-shadow(0 6px 14px rgba(30,58,95,.25));
 }
-
-/* ===== ALERT ===== */
 .err-box {
-  background: #fff; border: 1px solid #f8d7da; color: #842029;
-  border-radius: 12px; padding: 10px 14px; font-size: 12.5px;
-  margin-bottom: 14px; text-align: left;
+background: #fff; border: 1px solid #f8d7da; color: #842029;
+border-radius: 12px; padding: 10px 14px; font-size: 12.5px;
+margin-bottom: 14px; text-align: left;
 }
 .err-box.info { border-color: var(--border); color: var(--primary-dark); }
-
-/* ===== INPUT PIL ===== */
 .field {
-  display: flex; align-items: center;
-  background: #fff; border: 1px solid var(--border); border-radius: 999px;
-  height: 52px; padding: 0 20px; margin-bottom: 16px;
-  box-shadow: 0 4px 14px rgba(93,64,55,.08);
-  transition: .2s;
+display: flex; align-items: center;
+background: #fff; border: 1px solid var(--border); border-radius: 999px;
+height: 52px; padding: 0 20px; margin-bottom: 16px;
+box-shadow: 0 4px 14px rgba(30,58,95,.08);
+transition: .2s;
 }
-.field:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(109,76,65,.15); }
+.field:focus-within { border-color: var(--aksen); box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
 .f-icon { color: var(--muted); font-size: 17px; flex-shrink: 0; }
 .divider { width: 1px; height: 26px; background: var(--border); margin: 0 14px; flex-shrink: 0; }
 .field input {
-  border: 0; outline: 0; background: transparent; width: 100%;
-  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500;
-  letter-spacing: 1.5px; color: var(--text);
+border: 0; outline: 0; background: transparent; width: 100%;
+font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500;
+letter-spacing: 1.5px; color: var(--text);
 }
-.field input::placeholder { color: #b3a294; }
-
-/* ===== OPSI ===== */
+.field input::placeholder { color: #a0aec0; }
 .opts { display: flex; justify-content: space-between; align-items: center; margin: 2px 8px 24px; font-size: 12.5px; }
 .remember { display: flex; align-items: center; gap: 7px; color: var(--muted); cursor: pointer; }
-.remember input { accent-color: var(--primary); width: 15px; height: 15px; cursor: pointer; }
-.forgot { color: var(--primary); text-decoration: none; font-weight: 600; }
-.forgot:hover { color: var(--primary-dark); text-decoration: underline; }
-
-/* ===== TOMBOL LOGIN ===== */
+.remember input { accent-color: var(--aksen); width: 15px; height: 15px; cursor: pointer; }
+.forgot { color: var(--aksen); text-decoration: none; font-weight: 600; }
+.forgot:hover { color: var(--primary); text-decoration: underline; }
 .btn-login {
-  background: var(--primary); color: #fff; border: 0; border-radius: 999px;
-  height: 50px; padding: 0 64px;
-  font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 700; letter-spacing: 2px;
-  cursor: pointer; box-shadow: 0 6px 18px rgba(93,64,55,.35);
-  transition: .2s;
+background: var(--aksen); color: #fff; border: 0; border-radius: 999px;
+height: 50px; padding: 0 64px;
+font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 700; letter-spacing: 2px;
+cursor: pointer; box-shadow: 0 6px 18px rgba(59,130,246,.35);
+transition: .2s;
 }
-.btn-login:hover { background: var(--primary-dark); transform: translateY(-1px); }
+.btn-login:hover { background: var(--primary); transform: translateY(-1px); }
 .btn-login:active { transform: translateY(0); }
-
 .home-link { display: inline-block; margin-top: 26px; font-size: 12px; color: var(--muted); text-decoration: none; }
-.home-link:hover { color: var(--primary-dark); text-decoration: underline; }
+.home-link:hover { color: var(--primary); text-decoration: underline; }
 </style>
 </head>
 <body>
 <div class="login-wrap">
-    <div class="login-icon"><i class="bi bi-people-fill"></i></div>
-
-    @if (session('status'))
-        <div class="err-box info"><i class="bi bi-info-circle me-1"></i>{{ session('status') }}</div>
-    @endif
-    @if ($errors->any())
-        <div class="err-box"><i class="bi bi-exclamation-circle me-1"></i>{{ $errors->first() }}</div>
-    @endif
-
-    <form method="POST" action="{{ route('login') }}">
-        @csrf
-        <div class="field">
-            <i class="bi bi-person-fill f-icon"></i>
-            <span class="divider"></span>
-            <input type="email" name="email" placeholder="EMAIL"
-                   value="{{ old('email') }}" required autofocus autocomplete="username">
-        </div>
-        <div class="field">
-            <i class="bi bi-lock-fill f-icon"></i>
-            <span class="divider"></span>
-            <input type="password" name="password" placeholder="PASSWORD"
-                   required autocomplete="current-password">
-        </div>
-        <div class="opts">
-            <label class="remember"><input type="checkbox" name="remember"> Ingat saya</label>
-            <a class="forgot" href="{{ route('password.request') }}">Lupa password?</a>
-        </div>
-        <button type="submit" class="btn-login">LOGIN</button>
-    </form>
-
-    <a class="home-link" href="{{ url('/') }}"><i class="bi bi-arrow-left me-1"></i>Kembali ke beranda</a>
+<div class="login-icon"><i class="bi bi-people-fill"></i></div>
+@if (session('status'))
+<div class="err-box info"><i class="bi bi-info-circle me-1"></i>{{ session('status') }}</div>
+@endif
+@if ($errors->any())
+<div class="err-box"><i class="bi bi-exclamation-circle me-1"></i>{{ $errors->first() }}</div>
+@endif
+<form method="POST" action="{{ route('login') }}">
+@csrf
+<div class="field">
+<i class="bi bi-person-fill f-icon"></i>
+<span class="divider"></span>
+<input type="email" name="email" placeholder="EMAIL"
+value="{{ old('email') }}" required autofocus autocomplete="username">
+</div>
+<div class="field">
+<i class="bi bi-lock-fill f-icon"></i>
+<span class="divider"></span>
+<input type="password" name="password" placeholder="PASSWORD"
+required autocomplete="current-password">
+</div>
+<div class="opts">
+<label class="remember"><input type="checkbox" name="remember"> Ingat saya</label>
+<a class="forgot" href="{{ route('password.request') }}">Lupa password?</a>
+</div>
+<button type="submit" class="btn-login">LOGIN</button>
+</form>
+<a class="home-link" href="{{ url('/') }}"><i class="bi bi-arrow-left me-1"></i>Kembali ke beranda</a>
 </div>
 </body>
 </html>
@@ -6217,54 +6353,44 @@ $classes = ($active ?? false)
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root {
---primary: #6d4c41;
---primary-dark: #5d4037;
---sidebar: #2d1b16;
---sidebar-hover: #4e342e;
---background: #f7f2ea;
+--primary: #1e3a5f;
+--primary-dark: #152a45;
+--sidebar: #1e3a5f;
+--sidebar-hover: #2c5282;
+--background: #f0f4f8;
 --card: #ffffff;
---text: #33261f;
---muted: #8a7a6e;
---border: #e6dacc;
+--text: #1a202c;
+--muted: #718096;
+--border: #e2e8f0;
 --drawer-width: 380px;
 --sidebar-width: 260px;
 }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background); color: var(--text); }
-
-/* ===== SIDEBAR ===== */
-.sidebar { width: var(--sidebar-width); height: 100vh; position: fixed; left: 0; top: 0; background: var(--sidebar); color: white; z-index: 1000; transition: transform .3s ease; overflow-y: auto; }
-.brand { height: 75px; display: flex; align-items: center; padding: 0 24px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-.brand-logo { height: 42px; width: auto; object-fit: contain; margin-right: 12px; flex-shrink: 0; }
-.brand-icon { width: 42px; height: 42px; display: none; align-items: center; justify-content: center; background: var(--primary); border-radius: 12px; font-size: 22px; margin-right: 12px; flex-shrink: 0; }
+.sidebar { width: var(--sidebar-width); height: 100vh; position: fixed; left: 0; top: 0; background: linear-gradient(180deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; z-index: 1000; transition: transform .3s ease; overflow-y: auto; }
+.brand { height: 75px; display: flex; align-items: center; justify-content: center; padding: 0 24px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.brand-logo { height: 46px; width: auto; object-fit: contain; display: block; }
+.brand-icon { width: 42px; height: 42px; display: none; align-items: center; justify-content: center; background: rgba(255,255,255,0.15); border-radius: 12px; font-size: 22px; flex-shrink: 0; }
 .brand-icon i { display: inline-block; animation: wobble 2.6s ease-in-out infinite; }
-.brand-title { font-size: 18px; font-weight: 800; }
-.brand-subtitle { font-size: 11px; color: #cbb5a8; }
 .sidebar-content { padding: 20px 14px; }
-.menu-title { font-size: 11px; font-weight: 700; color: #a1887f; text-transform: uppercase; padding: 15px 12px 8px; letter-spacing: 0.8px; }
-.sidebar a { color: #e5d8cf; text-decoration: none; display: flex; align-items: center; gap: 12px; padding: 11px 13px; border-radius: 9px; margin-bottom: 3px; font-size: 14px; transition: 0.2s; }
+.menu-title { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.5); text-transform: uppercase; padding: 15px 12px 8px; letter-spacing: 0.8px; }
+.sidebar a { color: rgba(255,255,255,0.75); text-decoration: none; display: flex; align-items: center; gap: 12px; padding: 11px 13px; border-radius: 9px; margin-bottom: 3px; font-size: 14px; transition: 0.2s; }
 .sidebar a:hover { background: var(--sidebar-hover); color: white; }
-.sidebar a.active { background: var(--primary); color: white; }
+.sidebar a.active { background: rgba(255,255,255,0.15); color: white; border-left: 3px solid var(--accent); }
 .sidebar a i { font-size: 17px; }
-.sidebar-footer { padding: 14px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 20px; }
-
-/* ===== OVERLAY (gelap, saat sidebar terbuka di HP) ===== */
+.sidebar-footer { padding: 14px; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 20px; }
 .sidebar-overlay { position: fixed; inset: 0; background: rgba(20,10,5,.5); z-index: 999; opacity: 0; visibility: hidden; transition: opacity .25s ease, visibility .25s ease; }
-
-/* ===== MAIN ===== */
 .main { margin-left: var(--sidebar-width); min-height: 100vh; transition: margin-left .3s ease, width .35s ease; width: calc(100% - var(--sidebar-width)); }
 .main.drawer-open { width: calc(100% - var(--sidebar-width) - var(--drawer-width)); }
-.topbar { height: 75px; background: white; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 30px; gap: 12px; position: sticky; top: 0; z-index: 900; }
+.topbar { height: 75px; background: white; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 30px; gap: 12px; position: sticky; top: 0; z-index: 900; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
 .topbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .page-title { font-size: 18px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .page-subtitle { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .profile { display: flex; align-items: center; gap: 10px; }
-.profile-avatar { width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; background: #e8d5bd; color: var(--primary-dark); border-radius: 50%; font-weight: 700; flex-shrink: 0; }
-.btn-logout { background: transparent; border: 1px solid var(--border); color: #ffffff; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; transition: 0.2s; }
-.btn-logout:hover { background: #f8d7da; color: #842029; border-color: #f8d7da; }
+.profile-avatar { width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #3b82f6, #2c5282); color: white; border-radius: 50%; font-weight: 700; flex-shrink: 0; }
+.btn-logout { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #ffffff; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; transition: 0.2s; }
+.btn-logout:hover { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border-color: rgba(239, 68, 68, 0.4); }
 .content { padding: 30px; }
-
-/* ===== TOMBOL TOGGLE SIDEBAR (☰) ===== */
 .btn-toggle-sidebar {
 width: 40px; height: 40px; flex-shrink: 0;
 display: none; align-items: center; justify-content: center;
@@ -6272,46 +6398,43 @@ background: #fff; border: 1px solid var(--border); border-radius: 10px;
 font-size: 18px; color: var(--text); cursor: pointer; transition: .2s;
 }
 .btn-toggle-sidebar:hover { background: var(--background); }
-
-/* ===== CARDS & PANELS ===== */
-.stat-card { background: white; border: 1px solid var(--border); border-radius: 16px; padding: 20px; height: 100%; transition: 0.2s; }
-.stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.06); }
+.stat-card { background: white; border: 1px solid var(--border); border-radius: 16px; padding: 20px; height: 100%; transition: 0.2s; position: relative; overflow: hidden; }
+.stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #3b82f6, #2c5282); }
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(30,58,95,0.1); }
 .stat-top { display: flex; justify-content: space-between; align-items: center; }
 .stat-icon { width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; border-radius: 12px; font-size: 20px; flex-shrink: 0; }
-.icon-green { background: #e8d5bd; color: #5d4037; }
-.icon-blue { background: #cfe2ff; color: #084298; }
-.icon-yellow { background: #fff3cd; color: #997404; }
-.icon-red { background: #f8d7da; color: #842029; }
+.icon-green { background: rgba(16, 185, 129, 0.12); color: #10b981; }
+.icon-blue { background: rgba(59, 130, 246, 0.12); color: #3b82f6; }
+.icon-yellow { background: rgba(245, 158, 11, 0.12); color: #f59e0b; }
+.icon-red { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
 .stat-label { color: var(--muted); font-size: 13px; margin-top: 16px; }
 .stat-value { font-size: 27px; font-weight: 800; margin-top: 4px; }
 .stat-description { color: var(--muted); font-size: 11px; margin-top: 4px; }
 .panel { background: white; border: 1px solid var(--border); border-radius: 16px; padding: 22px; height: 100%; }
 .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .panel-title { font-size: 16px; font-weight: 700; }
-.panel-link { color: var(--primary); text-decoration: none; font-size: 13px; font-weight: 600; }
+.panel-link { color: #3b82f6; text-decoration: none; font-size: 13px; font-weight: 600; }
 .table { vertical-align: middle; }
 .table thead th { font-size: 12px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
-.table tbody td { font-size: 13px; border-color: #f0e9df; }
-.btn-primary { background: var(--primary); border-color: var(--primary); }
-.btn-primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
-.btn-success { background: var(--primary); border-color: var(--primary); }
-.btn-success:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
-.badge.bg-success { background: var(--primary) !important; }
+.table tbody td { font-size: 13px; border-color: var(--border); }
+.btn-primary { background: #3b82f6; border-color: #3b82f6; }
+.btn-primary:hover { background: #2c5282; border-color: #2c5282; }
+.btn-success { background: #10b981; border-color: #10b981; }
+.btn-success:hover { background: #059669; border-color: #059669; }
+.badge.bg-success { background: #10b981 !important; }
 @keyframes wobble { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); } }
-
-/* ===== FLOATING BUTTON & DRAWER ===== */
 .btn-float-laporan {
 position: fixed; right: 22px; bottom: 22px; z-index: 1040;
 width: 56px; height: 56px; border-radius: 50%;
-background: var(--primary); color: #fff; border: none; font-size: 22px;
-box-shadow: 0 8px 20px rgba(45,27,22,.35);
+background: #3b82f6; color: #fff; border: none; font-size: 22px;
+box-shadow: 0 8px 20px rgba(59,130,246,.35);
 display: flex; align-items: center; justify-content: center;
 transition: transform .2s ease, background .2s ease, right .35s ease;
 }
-.btn-float-laporan:hover { transform: translateY(-3px); background: var(--primary-dark); }
+.btn-float-laporan:hover { transform: translateY(-3px); background: #2c5282; }
 .btn-float-laporan .badge-count {
 position: absolute; top: -4px; right: -4px;
-background: #d93636; color: #fff; font-size: 10px; font-weight: 700;
+background: #ef4444; color: #fff; font-size: 10px; font-weight: 700;
 border-radius: 999px; padding: 3px 6px;
 }
 body.drawer-open .btn-float-laporan { right: calc(var(--drawer-width) + 22px); }
@@ -6325,16 +6448,12 @@ border-left: 1px solid var(--border);
 .laporan-item .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; text-align: center; }
 .laporan-item .grid .v { font-weight: 700; font-size: 13px; }
 .laporan-item .grid .l { font-size: 10px; color: var(--muted); }
-
-/* ===== DESKTOP: tombol ☰ untuk collapse sidebar ===== */
 @media (min-width: 992px) {
 .btn-toggle-sidebar { display: flex; }
 body.sidebar-collapsed .sidebar { transform: translateX(-100%); }
 body.sidebar-collapsed .main { margin-left: 0; width: 100%; }
 body.sidebar-collapsed .main.drawer-open { width: calc(100% - var(--drawer-width)); }
 }
-
-/* ===== MOBILE / TABLET: sidebar jadi off-canvas ===== */
 @media (max-width: 991px) {
 .btn-toggle-sidebar { display: flex; }
 .sidebar { transform: translateX(-100%); }
@@ -6350,145 +6469,141 @@ body.drawer-open .btn-float-laporan { right: 22px; }
 .stat-value { font-size: 22px; }
 .brand { height: 64px; }
 }
-
-/* ===== HP KECIL ===== */
 @media (max-width: 480px) {
 #laporanDrawer { --bs-offcanvas-width: min(var(--drawer-width), 92vw); }
 .content { padding: 12px; }
 }
+body.role-umum .admin-only,
+body.role-umum a.btn[href$="/create"],
+body.role-umum a.btn[href*="/edit"],
+body.role-umum form[method="POST"]:not([action*="logout"]) button.btn-danger,
+body.role-umum form[method="POST"]:not([action*="logout"]) button.btn-warning {
+display: none !important;
+}
+body.role-umum .readonly-banner {
+background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); color: #1e40af;
+border-radius: 12px; padding: 10px 14px; font-size: 13px; margin-bottom: 18px;
+}
 </style>
 @stack('styles')
 </head>
-<body>
+<body class="{{ auth()->user()?->role === 'umum' ? 'role-umum' : '' }}">
 @php
 $user = auth()->user();
 $isAdmin = $user && ($user->role ?? '') === 'admin';
 @endphp
-
 <aside class="sidebar" id="sidebar">
-    {{-- ===== BRAND DENGAN LOGO ===== --}}
-    <div class="brand">
-        <img src="{{ asset('logo.png') }}" alt="Logo" class="brand-logo"
-             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-        <div class="brand-icon"><i class="bi bi-egg-fried"></i></div>
-        <div>
-            <div class="brand-title">BukanAyam</div>
-            <div class="brand-subtitle">Peternakan Ayam</div>
-        </div>
-    </div>
-    <div class="sidebar-content">
-        @if ($isAdmin)
-        <div class="menu-title">Menu Utama</div>
-        <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">
-            <i class="bi bi-grid-1x2-fill"></i> Dashboard
-        </a>
-        <div class="menu-title">Data Peternakan</div>
-        <a href="{{ route('kandang.index') }}" class="{{ request()->is('kandang*') ? 'active' : '' }}">
-            <i class="bi bi-house-door-fill"></i> Kandang
-        </a>
-        <a href="{{ route('populasi.index') }}" class="{{ request()->is('populasi*') ? 'active' : '' }}">
-            <i class="bi bi-people-fill"></i> Populasi Ayam
-        </a>
-        <a href="{{ route('bobot.index') }}" class="{{ request()->is('bobot*') ? 'active' : '' }}">
-            <i class="bi bi-speedometer2"></i> Bobot Ayam
-        </a>
-        <div class="menu-title">Produksi</div>
-        <a href="{{ route('produksi-telur.index') }}" class="{{ request()->is('produksi-telur*') ? 'active' : '' }}">
-            <i class="bi bi-egg-fill"></i> Produksi Telur
-        </a>
-        <a href="{{ route('penjualan-telur.index') }}" class="{{ request()->is('penjualan-telur*') ? 'active' : '' }}">
-            <i class="bi bi-cash-stack"></i> Penjualan Telur
-        </a>
-        <a href="{{ route('stok-telur.index') }}" class="{{ request()->is('stok-telur*') ? 'active' : '' }}">
-            <i class="bi bi-boxes"></i> Stok Telur
-        </a>
-        <a href="{{ route('gudang-telur.index') }}" class="{{ request()->is('gudang-telur*') ? 'active' : '' }}">
-            <i class="bi bi-building"></i> Gudang Telur
-        </a>
-        <div class="menu-title">Keuangan</div>
-        <a href="{{ route('arus-kas.index') }}" class="{{ request()->is('arus-kas*') ? 'active' : '' }}">
-            <i class="bi bi-cash-coin"></i> Arus Kas
-        </a>
-        <div class="menu-title">Pakan</div>
-        <a href="{{ route('pakan-kandang.index') }}" class="{{ request()->is('pakan-kandang*') ? 'active' : '' }}">
-            <i class="bi bi-box-seam-fill"></i> Stok Pakan
-        </a>
-        <a href="{{ route('pemberian-pakan.index') }}" class="{{ request()->is('pemberian-pakan*') ? 'active' : '' }}">
-            <i class="bi bi-basket-fill"></i> Pemberian Pakan
-        </a>
-        <a href="{{ route('pakan.laporan') }}" class="{{ request()->is('laporan-pakan*') ? 'active' : '' }}">
-            <i class="bi bi-bar-chart-fill"></i> Laporan Pakan
-        </a>
-        <div class="menu-title">Man Power</div>
-        <a href="{{ route('admin.laporan.index') }}" class="{{ request()->is('admin/laporan*') ? 'active' : '' }}">
-            <i class="bi bi-clipboard2-data-fill"></i> Laporan Harian
-        </a>
-        @else
-        <div class="menu-title">Menu</div>
-        <a href="{{ route('manpower.laporan.create') }}" class="{{ request()->routeIs('manpower.laporan.*') ? 'active' : '' }}">
-            <i class="bi bi-pencil-square"></i> Input Laporan Harian
-        </a>
-        @endif
-        <div class="sidebar-footer">
-            <form method="POST" action="{{ route('logout') }}">
-                @csrf
-                <button type="submit" class="btn-logout w-100 text-start d-flex align-items-center gap-2">
-                    <i class="bi bi-box-arrow-right"></i> Keluar
-                </button>
-            </form>
-        </div>
-    </div>
+<div class="brand">
+<img src="{{ asset('logo.png') }}" alt="Logo" class="brand-logo"
+onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+<div class="brand-icon"><i class="bi bi-egg-fried"></i></div>
+</div>
+<div class="sidebar-content">
+@if ($isAdmin || ($user->role ?? '') === 'umum')
+<div class="menu-title">Menu Utama</div>
+<a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">
+<i class="bi bi-grid-1x2-fill"></i> Dashboard
+</a>
+<div class="menu-title">Data Peternakan</div>
+<a href="{{ route('kandang.index') }}" class="{{ request()->is('kandang*') ? 'active' : '' }}">
+<i class="bi bi-house-door-fill"></i> Kandang
+</a>
+<a href="{{ route('populasi.index') }}" class="{{ request()->is('populasi*') ? 'active' : '' }}">
+<i class="bi bi-people-fill"></i> Populasi Ayam
+</a>
+<a href="{{ route('bobot.index') }}" class="{{ request()->is('bobot*') ? 'active' : '' }}">
+<i class="bi bi-speedometer2"></i> Bobot Ayam
+</a>
+<div class="menu-title">Produksi</div>
+<a href="{{ route('produksi-telur.index') }}" class="{{ request()->is('produksi-telur*') ? 'active' : '' }}">
+<i class="bi bi-egg-fill"></i> Produksi Telur
+</a>
+<a href="{{ route('penjualan-telur.index') }}" class="{{ request()->is('penjualan-telur*') ? 'active' : '' }}">
+<i class="bi bi-cash-stack"></i> Penjualan Telur
+</a>
+<a href="{{ route('stok-telur.index') }}" class="{{ request()->is('stok-telur*') ? 'active' : '' }}">
+<i class="bi bi-boxes"></i> Stok Telur
+</a>
+<a href="{{ route('gudang-telur.index') }}" class="{{ request()->is('gudang-telur*') ? 'active' : '' }}">
+<i class="bi bi-building"></i> Gudang Telur
+</a>
+<div class="menu-title">Keuangan</div>
+<a href="{{ route('arus-kas.index') }}" class="{{ request()->is('arus-kas*') ? 'active' : '' }}">
+<i class="bi bi-cash-coin"></i> Arus Kas
+</a>
+<div class="menu-title">Pakan</div>
+<a href="{{ route('pakan-kandang.index') }}" class="{{ request()->is('pakan-kandang*') ? 'active' : '' }}">
+<i class="bi bi-box-seam-fill"></i> Stok Pakan
+</a>
+<a href="{{ route('pemberian-pakan.index') }}" class="{{ request()->is('pemberian-pakan*') ? 'active' : '' }}">
+<i class="bi bi-basket-fill"></i> Pemberian Pakan
+</a>
+<a href="{{ route('pakan.laporan') }}" class="{{ request()->is('laporan-pakan*') ? 'active' : '' }}">
+<i class="bi bi-bar-chart-fill"></i> Laporan Pakan
+</a>
+<div class="menu-title">Man Power</div>
+<a href="{{ route('admin.laporan.index') }}" class="{{ request()->is('admin/laporan*') ? 'active' : '' }}">
+<i class="bi bi-clipboard2-data-fill"></i> Laporan Harian
+</a>
+@else
+<div class="menu-title">Menu</div>
+<a href="{{ route('manpower.laporan.create') }}" class="{{ request()->routeIs('manpower.laporan.*') ? 'active' : '' }}">
+<i class="bi bi-pencil-square"></i> Input Laporan Harian
+</a>
+@endif
+</div>
+<div class="sidebar-footer">
+<form method="POST" action="{{ route('logout') }}" class="mb-0">
+@csrf
+<button type="submit" class="btn-logout w-100 text-start d-flex align-items-center gap-2">
+<i class="bi bi-box-arrow-right"></i> Keluar
+</button>
+</form>
+</div>
 </aside>
-
-{{-- Overlay gelap saat sidebar terbuka di HP --}}
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
 <div class="main" id="mainArea">
 <header class="topbar">
-    <div class="topbar-left">
-        <button class="btn-toggle-sidebar" id="btnToggleSidebar" type="button" title="Buka / tutup menu">
-            <i class="bi bi-list"></i>
-        </button>
-        <div>
-            <div class="page-title">@yield('title', 'Dashboard')</div>
-            <div class="page-subtitle">Sistem Manajemen Peternakan Ayam</div>
-        </div>
-    </div>
-    <div class="profile">
-        @auth
-        <div class="profile-avatar">{{ strtoupper(substr($user->name ?? 'U', 0, 1)) }}</div>
-        <div class="d-none d-md-block">
-            <div style="font-size:13px;font-weight:600;">{{ $user->name ?? 'User' }}</div>
-            <div style="font-size:11px;color:#8a7a6e;">{{ ucfirst($user->role ?? 'user') }}</div>
-        </div>
-        @else
-        <div class="profile-avatar">?</div>
-        @endauth
-    </div>
+<div class="topbar-left">
+<button class="btn-toggle-sidebar" id="btnToggleSidebar" type="button" title="Buka / tutup menu">
+<i class="bi bi-list"></i>
+</button>
+<div>
+<div class="page-title">@yield('title', 'Dashboard')</div>
+<div class="page-subtitle">Sistem Manajemen Peternakan Ayam</div>
+</div>
+</div>
+<div class="profile">
+@auth
+<div class="profile-avatar">{{ strtoupper(substr($user->name ?? 'U', 0, 1)) }}</div>
+<div class="d-none d-md-block">
+<div style="font-size:13px;font-weight:600;">{{ $user->name ?? 'User' }}</div>
+<div style="font-size:11px;color:#718096;">{{ ucfirst($user->role ?? 'user') }}</div>
+</div>
+@else
+<div class="profile-avatar">?</div>
+@endauth
+</div>
 </header>
-
 <main class="content">
-    @if(session('success'))
-    <div class="alert alert-success border-0 shadow-sm">
-        <i class="bi bi-check-circle-fill me-2"></i> {{ session('success') }}
-    </div>
-    @endif
-    @if($errors->any())
-    <div class="alert alert-danger border-0 shadow-sm">
-        <strong>Terjadi kesalahan:</strong>
-        <ul class="mb-0 mt-2">
-            @foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach
-        </ul>
-    </div>
-    @endif
-    @yield('content')
+@if(session('success'))
+<div class="alert alert-success border-0 shadow-sm">
+<i class="bi bi-check-circle-fill me-2"></i> {{ session('success') }}
+</div>
+@endif
+@if($errors->any())
+<div class="alert alert-danger border-0 shadow-sm">
+<strong>Terjadi kesalahan:</strong>
+<ul class="mb-0 mt-2">
+@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach
+</ul>
+</div>
+@endif
+@yield('content')
 </main>
 </div>
-
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 @stack('scripts')
-
-{{-- ===== LOGIKA TOGGLE SIDEBAR (desktop collapse / mobile off-canvas) ===== --}}
 <script>
 (function () {
 var btn     = document.getElementById('btnToggleSidebar');
@@ -6496,84 +6611,79 @@ var overlay = document.getElementById('sidebarOverlay');
 var sidebar = document.getElementById('sidebar');
 function isMobile() { return window.innerWidth < 992; }
 if (btn) btn.addEventListener('click', function () {
-    if (isMobile()) document.body.classList.toggle('sidebar-open');
-    else            document.body.classList.toggle('sidebar-collapsed');
+if (isMobile()) document.body.classList.toggle('sidebar-open');
+else            document.body.classList.toggle('sidebar-collapsed');
 });
 if (overlay) overlay.addEventListener('click', function () {
-    document.body.classList.remove('sidebar-open');
+document.body.classList.remove('sidebar-open');
 });
 if (sidebar) sidebar.querySelectorAll('a').forEach(function (a) {
-    a.addEventListener('click', function () {
-        if (isMobile()) document.body.classList.remove('sidebar-open');
-    });
+a.addEventListener('click', function () {
+if (isMobile()) document.body.classList.remove('sidebar-open');
+});
 });
 window.addEventListener('resize', function () {
-    if (!isMobile()) document.body.classList.remove('sidebar-open');
+if (!isMobile()) document.body.classList.remove('sidebar-open');
 });
 })();
 </script>
-
-{{-- ===== FLOATING LAPORAN HARIAN (khusus admin) ===== --}}
 @if ($isAdmin)
 @php
 $laporanFloating = \App\Models\LaporanHarian::with('kandang')
-    ->latest('tanggal')->latest('id')->limit(12)->get();
+->latest('tanggal')->latest('id')->limit(12)->get();
 $laporanHariIni = \App\Models\LaporanHarian::whereDate('tanggal', today())->count();
 @endphp
 <button class="btn-float-laporan" type="button" data-bs-toggle="offcanvas"
-        data-bs-target="#laporanDrawer" aria-controls="laporanDrawer"
-        title="Lihat laporan harian terbaru">
-    <i class="bi bi-clipboard2-data-fill"></i>
-    @if($laporanHariIni > 0)
-        <span class="badge-count">{{ $laporanHariIni }}</span>
-    @endif
+data-bs-target="#laporanDrawer" aria-controls="laporanDrawer"
+title="Lihat laporan harian terbaru">
+<i class="bi bi-clipboard2-data-fill"></i>
+@if($laporanHariIni > 0)
+<span class="badge-count">{{ $laporanHariIni }}</span>
+@endif
 </button>
-
 <div class="offcanvas offcanvas-end" tabindex="-1" id="laporanDrawer"
-     aria-labelledby="laporanDrawerLabel"
-     data-bs-backdrop="false"
-     data-bs-scroll="true">
-    <div class="offcanvas-header" style="background: var(--sidebar); color:#fff;">
-        <h5 class="offcanvas-title fw-bold" id="laporanDrawerLabel">
-            <i class="bi bi-clipboard2-data-fill me-2"></i>Laporan Harian Terbaru
-        </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-    </div>
-    <div class="offcanvas-body">
-        @forelse($laporanFloating as $lap)
-        <div class="laporan-item">
-            <div class="head">
-                <span>{{ $lap->tanggal->format('d/m/Y') }}</span>
-                <span class="badge" style="background:var(--primary);color:#fff;">
-                    {{ $lap->kandang->nama ?? '-' }}
-                </span>
-            </div>
-            <div class="grid">
-                <div><div class="v">{{ number_format($lap->hidup) }}</div><div class="l">Hidup</div></div>
-                <div><div class="v text-danger">{{ number_format($lap->mati) }}</div><div class="l">Mati</div></div>
-                <div><div class="v text-warning">{{ number_format($lap->afkir) }}</div><div class="l">Afkir</div></div>
-                <div><div class="v text-success">{{ number_format($lap->sisa_ayam) }}</div><div class="l">Sisa</div></div>
-            </div>
-            <div class="grid mt-1">
-                <div><div class="v">{{ number_format($lap->total_pakan, 0) }}</div><div class="l">Pakan (kg)</div></div>
-                <div><div class="v">{{ number_format($lap->produksi_telur) }}</div><div class="l">Telur</div></div>
-                <div><div class="v">{{ number_format($lap->telur_pecah) }}</div><div class="l">Pecah</div></div>
-                <div><div class="v">{{ $lap->umur_minggu }}</div><div class="l">Minggu</div></div>
-            </div>
-        </div>
-        @empty
-        <div class="text-center text-muted small py-4">
-            <i class="bi bi-inbox fs-3 d-block mb-2"></i>
-            Belum ada laporan harian.
-        </div>
-        @endforelse
-        <a href="{{ route('admin.laporan.index') }}" class="btn btn-sm btn-primary w-100">
-            Lihat Semua Laporan
-        </a>
-    </div>
+aria-labelledby="laporanDrawerLabel"
+data-bs-backdrop="false"
+data-bs-scroll="true">
+<div class="offcanvas-header" style="background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color:#fff;">
+<h5 class="offcanvas-title fw-bold" id="laporanDrawerLabel">
+<i class="bi bi-clipboard2-data-fill me-2"></i>Laporan Harian Terbaru
+</h5>
+<button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
 </div>
-
-{{-- SCRIPT EFEK BELAH (drawer) --}}
+<div class="offcanvas-body">
+@forelse($laporanFloating as $lap)
+<div class="laporan-item">
+<div class="head">
+<span>{{ $lap->tanggal->format('d/m/Y') }}</span>
+<span class="badge" style="background:#3b82f6;color:#fff;">
+{{ $lap->kandang->nama ?? '-' }}
+</span>
+</div>
+<div class="grid">
+<div><div class="v">{{ number_format($lap->hidup) }}</div><div class="l">Hidup</div></div>
+<div><div class="v text-danger">{{ number_format($lap->mati) }}</div><div class="l">Mati</div></div>
+<div><div class="v text-warning">{{ number_format($lap->afkir) }}</div><div class="l">Afkir</div></div>
+<div><div class="v text-success">{{ number_format($lap->sisa_ayam) }}</div><div class="l">Sisa</div></div>
+</div>
+<div class="grid mt-1">
+<div><div class="v">{{ number_format($lap->total_pakan, 0) }}</div><div class="l">Pakan (kg)</div></div>
+<div><div class="v">{{ number_format($lap->produksi_telur) }}</div><div class="l">Telur</div></div>
+<div><div class="v">{{ number_format($lap->telur_pecah) }}</div><div class="l">Pecah</div></div>
+<div><div class="v">{{ $lap->umur_minggu }}</div><div class="l">Minggu</div></div>
+</div>
+</div>
+@empty
+<div class="text-center text-muted small py-4">
+<i class="bi bi-inbox fs-3 d-block mb-2"></i>
+Belum ada laporan harian.
+</div>
+@endforelse
+<a href="{{ route('admin.laporan.index') }}" class="btn btn-sm btn-primary w-100">
+Lihat Semua Laporan
+</a>
+</div>
+</div>
 <script>
 (function () {
 var drawer   = document.getElementById('laporanDrawer');
@@ -6587,16 +6697,15 @@ drawer.addEventListener('hide.bs.offcanvas', tutup);
 drawer.addEventListener('shown.bs.offcanvas', buka);
 drawer.addEventListener('hidden.bs.offcanvas', tutup);
 if (btnFloat) btnFloat.addEventListener('click', function () {
-    setTimeout(function () {
-        drawer.classList.contains('show') ? buka() : tutup();
-    }, 50);
+setTimeout(function () {
+drawer.classList.contains('show') ? buka() : tutup();
+}, 50);
 });
 var btnClose = drawer.querySelector('[data-bs-dismiss="offcanvas"]');
 if (btnClose) btnClose.addEventListener('click', tutup);
 })();
 </script>
 @endif
-
 </body>
 </html>
 
@@ -6605,26 +6714,26 @@ if (btnClose) btnClose.addEventListener('click', tutup);
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - BukanAyam</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        body { background: #f7f2ea; }
-        .btn-success { background: #6d4c41; border-color: #6d4c41; }
-        .btn-success:hover { background: #5d4037; border-color: #5d4037; }
-        .egg-wobble i { display: inline-block; animation: wobble 2.6s ease-in-out infinite; }
-        @keyframes wobble { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); } }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login - BukanAyam</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<style>
+body { background: #f0f4f8; }
+.btn-success { background: #1e3a5f; border-color: #1e3a5f; }
+.btn-success:hover { background: #152a45; border-color: #152a45; }
+.egg-wobble i { display: inline-block; animation: wobble 2.6s ease-in-out infinite; }
+@keyframes wobble { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); } }
+</style>
 </head>
 <body class="d-flex align-items-center min-vh-100">
-    <div class="container" style="max-width: 420px;">
-        {{ $slot }}
-        <a href="{{ url('/') }}" class="d-block text-center mt-3 small text-muted text-decoration-none">
-            ← Kembali ke beranda
-        </a>
-    </div>
+<div class="container" style="max-width: 420px;">
+{{ $slot }}
+<a href="{{ url('/') }}" class="d-block text-center mt-3 small text-muted text-decoration-none">
+← Kembali ke beranda
+</a>
+</div>
 </body>
 </html>
 
@@ -6639,50 +6748,59 @@ if (btnClose) btnClose.addEventListener('click', tutup);
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 <style>
-body { background: #f7f2ea; }
-.topbar { background: #2d1b16; }
+:root {
+--primary: #1e3a5f;
+--primary-dark: #152a45;
+--primary-soft: #e0e7ff;
+--border: #e2e8f0;
+--muted: #718096;
+--text: #1a202c;
+--krem: #f0f4f8;
+--krem-2: #e2e8f0;
+}
+body { background: var(--krem); color: var(--text); }
+.topbar { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); }
 .topbar .brand-logo { height: 38px; width: auto; object-fit: contain; }
 .topbar .brand-icon {
-    width: 38px; height: 38px; display: none; align-items: center; justify-content: center;
-    background: #6d4c41; border-radius: 10px; color: #fff; font-size: 18px;
+width: 38px; height: 38px; display: none; align-items: center; justify-content: center;
+background: #3b82f6; border-radius: 10px; color: #fff; font-size: 18px;
 }
 .topbar .brand-icon i { display: inline-block; animation: wobble 2.6s ease-in-out infinite; }
-.btn-success { background: #6d4c41; border-color: #6d4c41; }
-.btn-success:hover { background: #5d4037; border-color: #5d4037; }
+.topbar .brand-label { font-size: 13px; color: #cbd5e1; font-weight: 600; }
+.btn-success { background: #10b981; border-color: #10b981; }
+.btn-success:hover { background: #059669; border-color: #059669; }
 @keyframes wobble { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); } }
 </style>
 </head>
 <body>
 <nav class="topbar navbar navbar-dark px-3">
-    {{-- ===== BRAND DENGAN LOGO ===== --}}
-    <span class="navbar-brand fw-bold d-flex align-items-center gap-2">
-        <img src="{{ asset('logo.png') }}" alt="Logo" class="brand-logo"
-             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-        <span class="brand-icon"><i class="bi bi-egg-fried"></i></span>
-        BukanAyam
-    </span>
-    <div class="d-flex align-items-center gap-2">
-        <span class="text-white small d-none d-md-inline">{{ auth()->user()->name ?? '' }}</span>
-        <form method="POST" action="{{ route('logout') }}">
-            @csrf
-            <button class="btn btn-sm btn-outline-light"><i class="bi bi-box-arrow-right me-1"></i>Keluar</button>
-        </form>
-    </div>
+<span class="navbar-brand fw-bold d-flex align-items-center gap-2">
+<img src="{{ asset('logo.png') }}" alt="Logo" class="brand-logo"
+onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+<span class="brand-icon"><i class="bi bi-egg-fried"></i></span>
+</span>
+<div class="d-flex align-items-center gap-2">
+<span class="text-white small d-none d-md-inline">{{ auth()->user()->name ?? '' }}</span>
+<form method="POST" action="{{ route('logout') }}" class="mb-0">
+@csrf
+<button type="submit" class="btn btn-sm btn-outline-light">
+<i class="bi bi-box-arrow-right me-1"></i>Keluar
+</button>
+</form>
+</div>
 </nav>
-
-<main class="container py-4" style="max-width: 760px;">
-    @if (session('success'))
-    <div class="alert alert-success border-0 shadow-sm"><i class="bi bi-check-circle-fill me-2"></i>{{ session('success') }}</div>
-    @endif
-    @if ($errors->any())
-    <div class="alert alert-danger border-0 shadow-sm">
-        <strong>Periksa kembali:</strong>
-        <ul class="mb-0 mt-2">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>
-    </div>
-    @endif
-    @yield('content')
+<main class="container py-4" style="max-width: 980px;">
+@if (session('success'))
+<div class="alert alert-success border-0 shadow-sm"><i class="bi bi-check-circle-fill me-2"></i>{{ session('success') }}</div>
+@endif
+@if ($errors->any())
+<div class="alert alert-danger border-0 shadow-sm">
+<strong>Periksa kembali:</strong>
+<ul class="mb-0 mt-2">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>
+</div>
+@endif
+@yield('content')
 </main>
-
 </body>
 </html>
 
@@ -6790,6 +6908,95 @@ body { background: #f7f2ea; }
 </nav>
 
 
+===== C:\xampp\htdocs\peternakan_ayam\resources\views\layouts\umum.blade.php =====
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>@yield('title', 'Data Peternakan')</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+--primary: #1e3a5f; --primary-dark: #152a45;
+--sidebar: #1e3a5f; --sidebar-hover: #2c5282;
+--background: #f0f4f8; --text: #1a202c; --muted: #718096; --border: #e2e8f0;
+--sidebar-width: 250px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background); color: var(--text); }
+.sidebar { width: var(--sidebar-width); height: 100vh; position: fixed; left: 0; top: 0; background: linear-gradient(180deg, var(--primary) 0%, var(--primary-dark) 100%); color: #fff; z-index: 1000; overflow-y: auto; }
+.brand { height: 70px; display: flex; align-items: center; justify-content: center; gap: 10px; border-bottom: 1px solid rgba(255,255,255,.1); padding: 0 16px; }
+.brand-logo { height: 40px; width: auto; object-fit: contain; }
+.sidebar-content { padding: 18px 12px; }
+.menu-title { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.5); text-transform: uppercase; padding: 12px 12px 6px; letter-spacing: .8px; }
+.sidebar a { color: rgba(255,255,255,0.75); text-decoration: none; display: flex; align-items: center; gap: 12px; padding: 11px 13px; border-radius: 9px; margin-bottom: 3px; font-size: 14px; transition: .2s; }
+.sidebar a:hover { background: var(--sidebar-hover); color: #fff; }
+.sidebar a.active { background: rgba(255,255,255,0.15); color: #fff; }
+.sidebar a i { font-size: 17px; }
+.sidebar-footer { padding: 14px; border-top: 1px solid rgba(255,255,255,.1); margin-top: 16px; }
+.btn-logout { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,.2); color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; width: 100%; }
+.btn-logout:hover { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border-color: rgba(239, 68, 68, 0.4); }
+.main { margin-left: var(--sidebar-width); min-height: 100vh; }
+.topbar { height: 70px; background: #fff; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 26px; position: sticky; top: 0; z-index: 900; }
+.page-title { font-size: 17px; font-weight: 700; }
+.content { padding: 26px; }
+.stat-card { background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 18px; height: 100%; }
+.stat-label { color: var(--muted); font-size: 12px; }
+.stat-value { font-size: 24px; font-weight: 800; margin-top: 4px; }
+.panel { background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 20px; height: 100%; }
+.panel-title { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+.table { vertical-align: middle; }
+.table thead th { font-size: 11.5px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: .4px; }
+.table tbody td { font-size: 13px; border-color: var(--border); }
+@media (max-width: 991px) {
+.sidebar { transform: translateX(-100%); transition: transform .3s ease; }
+body.sidebar-open .sidebar { transform: translateX(0); }
+.main { margin-left: 0; }
+.btn-toggle { display: inline-flex !important; }
+}
+.btn-toggle { display: none; border: 1px solid var(--border); background: #fff; border-radius: 8px; width: 38px; height: 38px; align-items: center; justify-content: center; }
+</style>
+</head>
+<body>
+<aside class="sidebar" id="sidebar">
+<div class="brand">
+<img src="{{ asset('logo.png') }}" alt="Logo" class="brand-logo" onerror="this.style.display='none';">
+</div>
+<div class="sidebar-content">
+<div class="menu-title">Menu</div>
+<a href="{{ route('umum.home') }}" class="{{ request()->routeIs('umum.home') ? 'active' : '' }}"><i class="bi bi-grid-1x2-fill"></i> Ringkasan</a>
+<a href="{{ route('umum.populasi') }}" class="{{ request()->routeIs('umum.populasi') ? 'active' : '' }}"><i class="bi bi-people-fill"></i> Populasi Ayam</a>
+<a href="{{ route('umum.produksi') }}" class="{{ request()->routeIs('umum.produksi') ? 'active' : '' }}"><i class="bi bi-egg-fill"></i> Produksi Telur</a>
+<a href="{{ route('umum.penjualan') }}" class="{{ request()->routeIs('umum.penjualan') ? 'active' : '' }}"><i class="bi bi-cash-stack"></i> Penjualan</a>
+<a href="{{ route('umum.pakan') }}" class="{{ request()->routeIs('umum.pakan') ? 'active' : '' }}"><i class="bi bi-box-seam-fill"></i> Stok Pakan</a>
+<a href="{{ route('umum.laporan') }}" class="{{ request()->routeIs('umum.laporan') ? 'active' : '' }}"><i class="bi bi-clipboard2-data-fill"></i> Laporan Harian</a>
+</div>
+<div class="sidebar-footer">
+<form method="POST" action="{{ route('logout') }}" class="mb-0">
+@csrf
+<button type="submit" class="btn-logout"><i class="bi bi-box-arrow-right me-1"></i> Keluar</button>
+</form>
+</div>
+</aside>
+<div class="main">
+<header class="topbar">
+<div class="d-flex align-items-center gap-2">
+<button class="btn-toggle" type="button" onclick="document.body.classList.toggle('sidebar-open')"><i class="bi bi-list"></i></button>
+<div class="page-title">@yield('title', 'Ringkasan')</div>
+</div>
+</header>
+<main class="content">
+@yield('content')
+</main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+
 ===== C:\xampp\htdocs\peternakan_ayam\resources\views\manpower\create.blade.php =====
 @extends('layouts.manpower')
 
@@ -6798,284 +7005,251 @@ body { background: #f7f2ea; }
 @section('content')
 <style>
 .form-card {
-  background: #fff; border: 1px solid var(--border); border-radius: 20px;
-  box-shadow: 0 12px 40px rgba(93,64,55,.12); overflow: hidden;
+background: #fff; border: 1px solid var(--border, #e6dacc); border-radius: 20px;
+box-shadow: 0 12px 40px rgba(93,64,55,.12); overflow: hidden;
 }
 .stepper-panel {
-  background: var(--primary-soft); padding: 28px 24px;
-  border-right: 1px solid var(--border);
+background: var(--primary-soft, #f4ede6); padding: 28px 24px;
+border-right: 1px solid var(--border, #e6dacc);
 }
 .stepper-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
 .stepper-brand .logo {
-  width: 38px; height: 38px; border-radius: 10px; background: #fff;
-  color: var(--primary); display: flex; align-items: center; justify-content: center;
-  font-size: 18px; box-shadow: 0 2px 8px rgba(93,64,55,.15);
+width: 38px; height: 38px; border-radius: 10px; background: #fff;
+color: #6d4c41; display: flex; align-items: center; justify-content: center;
+font-size: 18px; box-shadow: 0 2px 8px rgba(93,64,55,.15);
 }
 .stepper-title { font-size: 17px; font-weight: 800; }
-
 .stepper { list-style: none; margin: 0; padding: 0; }
 .step {
-  display: flex; align-items: center; gap: 12px; padding: 9px 0;
-  color: var(--muted); font-size: 13.5px; font-weight: 600;
-  position: relative; cursor: pointer; transition: .2s;
+display: flex; align-items: center; gap: 12px; padding: 9px 0;
+color: var(--muted, #8a7a6e); font-size: 13.5px; font-weight: 600;
+position: relative; cursor: pointer; transition: .2s;
 }
 .step .dot {
-  width: 27px; height: 27px; border-radius: 50%;
-  border: 2px solid #d8c9b8; background: #fff; color: var(--muted);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 700; flex-shrink: 0; transition: .2s;
+width: 27px; height: 27px; border-radius: 50%;
+border: 2px solid #d8c9b8; background: #fff; color: var(--muted, #8a7a6e);
+display: flex; align-items: center; justify-content: center;
+font-size: 12px; font-weight: 700; flex-shrink: 0; transition: .2s;
 }
 .step:not(:last-child)::before {
-  content: ''; position: absolute; left: 13px; top: 40px; bottom: -4px;
-  width: 2px; background: #e0d2c0;
+content: ''; position: absolute; left: 13px; top: 40px; bottom: -4px;
+width: 2px; background: #e0d2c0;
 }
-.step.active { color: var(--text); }
-.step.active .dot, .step.done .dot {
-  border-color: var(--primary); background: var(--primary); color: #fff;
-}
-
-.pop-info { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-top: 22px; }
+.step.active { color: var(--text, #33261f); }
+.step.active .dot, .step.done .dot { border-color: #6d4c41; background: #6d4c41; color: #fff; }
+.pop-info { background: #fff; border: 1px solid var(--border, #e6dacc); border-radius: 14px; padding: 14px; margin-top: 22px; }
 .pop-info .sec-title { margin-bottom: 10px; }
-
 .form-panel { padding: 28px 26px; }
 .sec-title {
-  font-size: 11px; font-weight: 700; letter-spacing: .8px;
-  text-transform: uppercase; color: var(--muted); margin-bottom: 14px;
+font-size: 11px; font-weight: 700; letter-spacing: .8px;
+text-transform: uppercase; color: var(--muted, #8a7a6e); margin-bottom: 14px;
 }
-.form-section { padding-bottom: 22px; margin-bottom: 22px; border-bottom: 1px dashed var(--border); }
+.form-section { padding-bottom: 22px; margin-bottom: 22px; border-bottom: 1px dashed var(--border, #e6dacc); }
 .form-section:last-of-type { border-bottom: 0; margin-bottom: 0; padding-bottom: 0; }
-
 .form-panel .form-control, .form-panel .form-select {
-  background: #faf7f2; border: 1px solid var(--border); border-radius: 10px;
+background: #faf7f2; border: 1px solid var(--border, #e6dacc); border-radius: 10px;
 }
 .form-panel .form-control:focus, .form-panel .form-select:focus {
-  background: #fff; border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(109,76,65,.12);
+background: #fff; border-color: #6d4c41;
+box-shadow: 0 0 0 3px rgba(109,76,65,.12);
 }
-
+/* ✅ TOMBOL SIMPAN — warna dikunci eksplisit, tidak mungkin putih kosong lagi */
 .btn-pill {
-  border: none; border-radius: 999px; padding: 11px 28px;
-  background: var(--primary); color: #fff; font-weight: 700; font-size: 14px;
-  box-shadow: 0 6px 16px rgba(93,64,55,.3); transition: .2s;
+border: none; border-radius: 999px; padding: 11px 28px;
+background: #6d4c41; color: #fff; font-weight: 700; font-size: 14px;
+box-shadow: 0 6px 16px rgba(93,64,55,.3); transition: .2s;
+display: inline-flex; align-items: center; gap: 6px;
 }
-.btn-pill:hover { background: var(--primary-dark); transform: translateY(-1px); }
-
+.btn-pill:hover { background: #5d4037; color: #fff; transform: translateY(-1px); }
 @media (max-width: 767px) {
-  .stepper-panel { border-right: 0; border-bottom: 1px solid var(--border); padding: 20px; }
-  .stepper { display: flex; gap: 4px; justify-content: space-between; }
-  .step { flex-direction: column; gap: 6px; font-size: 10.5px; text-align: center; padding: 0; }
-  .step:not(:last-child)::before { display: none; }
-  .pop-info { margin-top: 16px; }
-  .form-panel { padding: 20px; }
+.stepper-panel { border-right: 0; border-bottom: 1px solid var(--border, #e6dacc); padding: 20px; }
+.stepper { display: flex; gap: 4px; justify-content: space-between; }
+.step { flex-direction: column; gap: 6px; font-size: 10.5px; text-align: center; padding: 0; }
+.step:not(:last-child)::before { display: none; }
+.pop-info { margin-top: 16px; }
+.form-panel { padding: 20px; }
 }
 </style>
 
 <div class="form-card">
-  <div class="row g-0">
+<div class="row g-0">
 
-    {{-- ===== PANEL KIRI: STEPPER ===== --}}
-    <aside class="col-md-4 stepper-panel">
-      <div class="stepper-brand">
-        <div class="logo"><i class="bi bi-egg-fried"></i></div>
-        <div class="stepper-title">Laporan Harian</div>
-      </div>
+{{-- ===== PANEL KIRI: STEPPER ===== --}}
+<aside class="col-md-4 stepper-panel">
+<div class="stepper-brand">
+<div class="logo"><i class="bi bi-egg-fried"></i></div>
+<div class="stepper-title">Laporan Harian</div>
+</div>
 
-      <ol class="stepper" id="stepper">
-        <li class="step active" data-target="sec-1"><span class="dot">1</span> Identitas</li>
-        <li class="step" data-target="sec-2"><span class="dot">2</span> Populasi</li>
-        <li class="step" data-target="sec-3"><span class="dot">3</span> Pakan & Produksi</li>
-        <li class="step" data-target="sec-4"><span class="dot">4</span> Catatan</li>
-      </ol>
+<ol class="stepper" id="stepper">
+<li class="step active" data-target="sec-1"><span class="dot">1</span> Identitas</li>
+<li class="step" data-target="sec-2"><span class="dot">2</span> Populasi</li>
+<li class="step" data-target="sec-3"><span class="dot">3</span> Pakan & Produksi</li>
+<li class="step" data-target="sec-4"><span class="dot">4</span> Catatan</li>
+</ol>
 
-      {{-- INFO POPULASI DARI ADMIN --}}
-      <div class="pop-info">
-        <div class="sec-title">Info Populasi (Admin)</div>
-        <div class="row text-center g-2">
-          <div class="col-3">
-            <div class="fw-bold" id="info-hidup">-</div>
-            <div class="small text-muted">Hidup</div>
-          </div>
-          <div class="col-3">
-            <div class="fw-bold text-success" id="info-sisa">-</div>
-            <div class="small text-muted">Sisa</div>
-          </div>
-          <div class="col-3">
-            <div class="fw-bold" id="info-usia">-</div>
-            <div class="small text-muted">Minggu</div>
-          </div>
-          <div class="col-3">
-            <div class="fw-bold small" id="info-tanggal">-</div>
-            <div class="small text-muted">Tgl Data</div>
-          </div>
-        </div>
-        <div class="small mt-2 mb-0" id="info-keterangan">
-          <i class="bi bi-info-circle me-1"></i> Silakan pilih kandang terlebih dahulu.
-        </div>
-      </div>
-    </aside>
+<div class="pop-info">
+<div class="sec-title">Info Populasi (Admin)</div>
+<div class="row text-center g-2">
+<div class="col-3"><div class="fw-bold" id="info-hidup">-</div><div class="small text-muted">Hidup</div></div>
+<div class="col-3"><div class="fw-bold text-success" id="info-sisa">-</div><div class="small text-muted">Sisa</div></div>
+<div class="col-3"><div class="fw-bold" id="info-usia">-</div><div class="small text-muted">Minggu</div></div>
+<div class="col-3"><div class="fw-bold small" id="info-tanggal">-</div><div class="small text-muted">Tgl Data</div></div>
+</div>
+<div class="small mt-2 mb-0" id="info-keterangan">
+<i class="bi bi-info-circle me-1"></i> Silakan pilih kandang terlebih dahulu.
+</div>
+</div>
+</aside>
 
-    {{-- ===== PANEL KANAN: FORM ===== --}}
-    <div class="col-md-8 form-panel">
-      <form action="{{ route('manpower.laporan.store') }}" method="POST">
-        @csrf
+{{-- ===== PANEL KANAN: FORM ===== --}}
+<div class="col-md-8 form-panel">
+<form action="{{ route('manpower.laporan.store') }}" method="POST">
+@csrf
 
-        {{-- SECTION 1 --}}
-        <div class="form-section" id="sec-1">
-          <div class="sec-title">Identitas Laporan</div>
-          <div class="row g-3">
-            <div class="col-6">
-              <label class="form-label small">Tanggal</label>
-              <input type="date" name="tanggal" class="form-control"
-                value="{{ old('tanggal', date('Y-m-d')) }}" required>
-            </div>
-            <div class="col-6">
-              <label class="form-label small">Kandang</label>
-              <select name="kandang_id" class="form-select" required>
-                <option value="">-- Pilih Kandang --</option>
-                @foreach ($kandangs as $kandang)
-                  <option value="{{ $kandang->id }}" @selected(old('kandang_id') == $kandang->id)>
-                    {{ $kandang->nama }}
-                  </option>
-                @endforeach
-              </select>
-            </div>
-          </div>
-        </div>
+{{-- SECTION 1 --}}
+<div class="form-section" id="sec-1">
+<div class="sec-title">Identitas Laporan</div>
+<div class="row g-3">
+<div class="col-6">
+<label class="form-label small">Tanggal</label>
+<input type="date" name="tanggal" class="form-control" value="{{ old('tanggal', date('Y-m-d')) }}" required>
+</div>
+<div class="col-6">
+<label class="form-label small">Kandang</label>
+<select name="kandang_id" class="form-select" required>
+<option value="">-- Pilih Kandang --</option>
+@foreach ($kandangs as $kandang)
+<option value="{{ $kandang->id }}" @selected(old('kandang_id') == $kandang->id)>{{ $kandang->nama }}</option>
+@endforeach
+</select>
+</div>
+</div>
+</div>
 
-        {{-- SECTION 2 --}}
-        <div class="form-section" id="sec-2">
-          <div class="sec-title">Data Populasi <span class="badge bg-secondary ms-1">Otomatis</span></div>
-          <div class="row g-3">
-            <div class="col-6">
-              <label class="form-label small">Populasi Awal (ekor)</label>
-              <input type="number" name="hidup" id="input-hidup" class="form-control"
-                value="{{ old('hidup', 0) }}" min="0" readonly required>
-              <div class="form-text" id="hint-hidup">Diambil otomatis dari data populasi admin.</div>
-            </div>
-            <div class="col-6">
-              <label class="form-label small">Umur Ayam (minggu)</label>
-              <input type="number" name="umur_minggu" id="input-umur" class="form-control"
-                value="{{ old('umur_minggu', 0) }}" min="0" readonly required>
-              <div class="form-text" id="hint-umur">Dihitung otomatis dari usia populasi admin.</div>
-            </div>
-            <div class="col-6">
-              <label class="form-label small">Mati (ekor)</label>
-              <input type="number" name="mati" class="form-control"
-                value="{{ old('mati', 0) }}" min="0" required>
-            </div>
-            <div class="col-6">
-              <label class="form-label small">Afkir (ekor)</label>
-              <input type="number" name="afkir" class="form-control"
-                value="{{ old('afkir', 0) }}" min="0" required>
-              <div class="form-text text-muted">Hanya dicatat, tidak mengurangi sisa.</div>
-            </div>
-          </div>
-        </div>
+{{-- SECTION 2 --}}
+<div class="form-section" id="sec-2">
+<div class="sec-title">Data Populasi <span class="badge bg-secondary ms-1">Otomatis</span></div>
+<div class="row g-3">
+<div class="col-6">
+<label class="form-label small">Populasi Awal (ekor)</label>
+<input type="number" name="hidup" id="input-hidup" class="form-control" value="{{ old('hidup', 0) }}" min="0" readonly required>
+<div class="form-text" id="hint-hidup">Diambil otomatis dari data populasi admin.</div>
+</div>
+<div class="col-6">
+<label class="form-label small">Umur Ayam (minggu)</label>
+<input type="number" name="umur_minggu" id="input-umur" class="form-control" value="{{ old('umur_minggu', 0) }}" min="0" readonly required>
+<div class="form-text" id="hint-umur">Dihitung otomatis dari usia populasi admin.</div>
+</div>
+<div class="col-6">
+<label class="form-label small">Mati (ekor)</label>
+<input type="number" name="mati" class="form-control" value="{{ old('mati', 0) }}" min="0" required>
+</div>
+<div class="col-6">
+<label class="form-label small">Afkir (ekor)</label>
+<input type="number" name="afkir" class="form-control" value="{{ old('afkir', 0) }}" min="0" required>
+<div class="form-text text-muted">Hanya dicatat, tidak mengurangi sisa.</div>
+</div>
+</div>
+</div>
 
-        {{-- SECTION 3 --}}
-        <div class="form-section" id="sec-3">
-          <div class="sec-title">Pakan & Produksi Telur</div>
-          <div class="row g-3">
-            <div class="col-12">
-              <label class="form-label small">Total Pakan (kg)</label>
-              <input type="number" step="0.01" name="total_pakan" class="form-control"
-                value="{{ old('total_pakan') }}" min="0" required>
-            </div>
-            <div class="col-6">
-              <label class="form-label small">Telur Bagus (butir)</label>
-              <input type="number" name="produksi_telur" id="telur-bagus" class="form-control"
-                value="{{ old('produksi_telur', 0) }}" min="0" required>
-            </div>
-            <div class="col-6">
-              <label class="form-label small">Telur Pecah / Reject (butir)</label>
-              <input type="number" name="telur_pecah" id="telur-pecah" class="form-control"
-                value="{{ old('telur_pecah', 0) }}" min="0" required>
-            </div>
-            <div class="col-12">
-              <label class="form-label small">Total Produksi (butir) — otomatis</label>
-              <input type="text" id="total-produksi" class="form-control fw-bold text-success"
-                readonly value="0 butir">
-            </div>
-          </div>
-        </div>
+{{-- SECTION 3 --}}
+<div class="form-section" id="sec-3">
+<div class="sec-title">Pakan & Produksi Telur</div>
+<div class="row g-3">
+<div class="col-12">
+<label class="form-label small">Total Pakan (kg)</label>
+<input type="number" step="0.01" name="total_pakan" class="form-control" value="{{ old('total_pakan') }}" min="0" required>
+</div>
+<div class="col-6">
+<label class="form-label small">Telur Bagus (butir)</label>
+<input type="number" name="produksi_telur" id="telur-bagus" class="form-control" value="{{ old('produksi_telur', 0) }}" min="0" required>
+</div>
+<div class="col-6">
+<label class="form-label small">Telur Pecah / Reject (butir)</label>
+<input type="number" name="telur_pecah" id="telur-pecah" class="form-control" value="{{ old('telur_pecah', 0) }}" min="0" required>
+</div>
+<div class="col-12">
+<label class="form-label small">Total Produksi (butir) — otomatis</label>
+<input type="text" id="total-produksi" class="form-control fw-bold text-success" readonly value="0 butir">
+</div>
+</div>
+</div>
 
-        {{-- SECTION 4 --}}
-        <div class="form-section" id="sec-4">
-          <div class="sec-title">Catatan Tambahan (opsional)</div>
-          <input type="text" name="column_10" class="form-control"
-            value="{{ old('column_10') }}"
-            placeholder="Misal: cuaca mendung, ada gangguan predator, dll.">
-        </div>
+{{-- SECTION 4 --}}
+<div class="form-section" id="sec-4">
+<div class="sec-title">Catatan Tambahan (opsional)</div>
+<input type="text" name="column_10" class="form-control" value="{{ old('column_10') }}" placeholder="Misal: cuaca mendung, ada gangguan predator, dll.">
+</div>
 
-        <div class="d-flex justify-content-end mt-4">
-          <button type="submit" class="btn-pill">
-            Simpan Laporan <i class="bi bi-arrow-right ms-1"></i>
-          </button>
-        </div>
-      </form>
-    </div>
+<div class="d-flex justify-content-end mt-4">
+<button type="submit" class="btn-pill">
+Simpan Laporan <i class="bi bi-arrow-right"></i>
+</button>
+</div>
+</form>
+</div>
 
-  </div>
+</div>
 </div>
 
 <script>
-/* ===== LOGIKA OTOMATIS POPULASI (sama seperti sebelumnya) ===== */
 const POPULASI = @js($populasiTerakhir);
 const TODAY    = @js($today);
 
 function angka(el) { return parseInt(el.value || 0, 10) || 0; }
 function hariAntara(t1, t2) {
-  if (!t1 || !t2) return 0;
-  return Math.max(0, Math.round((new Date(t2) - new Date(t1)) / 86400000));
+if (!t1 || !t2) return 0;
+return Math.max(0, Math.round((new Date(t2) - new Date(t1)) / 86400000));
 }
 function updateInfo() {
-  const kandangId  = document.querySelector('[name="kandang_id"]').value;
-  const data       = POPULASI[kandangId] || null;
-  const inputHidup = document.getElementById('input-hidup');
-  const inputUmur  = document.getElementById('input-umur');
-  const hintHidup  = document.getElementById('hint-hidup');
-  const hintUmur   = document.getElementById('hint-umur');
-  const ket        = document.getElementById('info-keterangan');
+const kandangId  = document.querySelector('[name="kandang_id"]').value;
+const data       = POPULASI[kandangId] || null;
+const inputHidup = document.getElementById('input-hidup');
+const inputUmur  = document.getElementById('input-umur');
+const hintHidup  = document.getElementById('hint-hidup');
+const hintUmur   = document.getElementById('hint-umur');
+const ket        = document.getElementById('info-keterangan');
 
-  if (data) {
-    inputHidup.value = data.sisa; inputHidup.readOnly = true;
-    hintHidup.textContent = 'Otomatis dari data populasi admin (sisa: ' + data.sisa.toLocaleString('id-ID') + ' ekor).';
-    const hariLalu   = hariAntara(data.tanggal_dasar, TODAY);
-    const usiaHari   = (data.usia_dasar || 0) + hariLalu;
-    const usiaMinggu = Math.floor(usiaHari / 7);
-    inputUmur.value = usiaMinggu; inputUmur.readOnly = true;
-    hintUmur.textContent = 'Usia dasar ' + (data.usia_dasar || 0) + ' hari + ' + hariLalu + ' hari = ' + usiaHari + ' hari.';
-    ket.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i>Data populasi dimuat. Populasi & usia read-only.';
-    document.getElementById('info-hidup').textContent  = data.sisa.toLocaleString('id-ID');
-    document.getElementById('info-sisa').textContent   = data.sisa.toLocaleString('id-ID');
-    document.getElementById('info-usia').textContent   = usiaMinggu;
-    document.getElementById('info-tanggal').textContent = data.tanggal;
-  } else {
-    inputHidup.readOnly = false; inputUmur.readOnly = false; inputUmur.value = 0;
-    if (kandangId) {
-      hintHidup.textContent = 'Admin belum input populasi untuk kandang ini — isi manual.';
-      hintUmur.textContent  = 'Admin belum input populasi — isi umur (minggu) manual.';
-      ket.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>Belum ada data populasi dari admin.';
-    } else {
-      hintHidup.textContent = 'Diambil otomatis dari data populasi admin.';
-      hintUmur.textContent  = 'Dihitung otomatis dari usia populasi admin.';
-      ket.innerHTML = '<i class="bi bi-info-circle me-1"></i> Silakan pilih kandang terlebih dahulu.';
-    }
-    document.getElementById('info-hidup').textContent  = '-';
-    document.getElementById('info-sisa').textContent   = '-';
-    document.getElementById('info-usia').textContent   = '-';
-    document.getElementById('info-tanggal').textContent = '-';
-  }
-  const hidup = angka(inputHidup);
-  const mati  = angka(document.querySelector('[name="mati"]'));
-  document.getElementById('info-sisa').textContent =
-    kandangId ? Math.max(0, hidup - mati).toLocaleString('id-ID') : '-';
+if (data) {
+inputHidup.value = data.sisa; inputHidup.readOnly = true;
+hintHidup.textContent = 'Otomatis dari data populasi admin (sisa: ' + data.sisa.toLocaleString('id-ID') + ' ekor).';
+const hariLalu   = hariAntara(data.tanggal_dasar, TODAY);
+const usiaHari   = (data.usia_dasar || 0) + hariLalu;
+const usiaMinggu = Math.floor(usiaHari / 7);
+inputUmur.value = usiaMinggu; inputUmur.readOnly = true;
+hintUmur.textContent = 'Usia dasar ' + (data.usia_dasar || 0) + ' hari + ' + hariLalu + ' hari = ' + usiaHari + ' hari.';
+ket.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i>Data populasi dimuat. Populasi & usia read-only.';
+document.getElementById('info-hidup').textContent  = data.sisa.toLocaleString('id-ID');
+document.getElementById('info-sisa').textContent   = data.sisa.toLocaleString('id-ID');
+document.getElementById('info-usia').textContent   = usiaMinggu;
+document.getElementById('info-tanggal').textContent = data.tanggal;
+} else {
+inputHidup.readOnly = false; inputUmur.readOnly = false; inputUmur.value = 0;
+if (kandangId) {
+hintHidup.textContent = 'Admin belum input populasi untuk kandang ini — isi manual.';
+hintUmur.textContent  = 'Admin belum input populasi — isi umur (minggu) manual.';
+ket.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>Belum ada data populasi dari admin.';
+} else {
+hintHidup.textContent = 'Diambil otomatis dari data populasi admin.';
+hintUmur.textContent  = 'Dihitung otomatis dari usia populasi admin.';
+ket.innerHTML = '<i class="bi bi-info-circle me-1"></i> Silakan pilih kandang terlebih dahulu.';
+}
+document.getElementById('info-hidup').textContent  = '-';
+document.getElementById('info-sisa').textContent   = '-';
+document.getElementById('info-usia').textContent   = '-';
+document.getElementById('info-tanggal').textContent = '-';
+}
+const hidup = angka(inputHidup);
+const mati  = angka(document.querySelector('[name="mati"]'));
+document.getElementById('info-sisa').textContent =
+kandangId ? Math.max(0, hidup - mati).toLocaleString('id-ID') : '-';
 }
 function hitungTotalProduksi() {
-  const bagus = angka(document.getElementById('telur-bagus'));
-  const pecah = angka(document.getElementById('telur-pecah'));
-  document.getElementById('total-produksi').value =
-    (bagus + pecah).toLocaleString('id-ID') + ' butir';
+const bagus = angka(document.getElementById('telur-bagus'));
+const pecah = angka(document.getElementById('telur-pecah'));
+document.getElementById('total-produksi').value =
+(bagus + pecah).toLocaleString('id-ID') + ' butir';
 }
 document.querySelector('[name="kandang_id"]').addEventListener('change', updateInfo);
 document.getElementById('input-hidup').addEventListener('input', updateInfo);
@@ -7086,30 +7260,28 @@ document.getElementById('telur-pecah').addEventListener('input', hitungTotalProd
 updateInfo();
 hitungTotalProduksi();
 
-/* ===== STEPPER: klik = scroll, aktif mengikuti scroll ===== */
+/* Stepper: klik = scroll, aktif mengikuti scroll */
 (function () {
-  const steps = document.querySelectorAll('#stepper .step');
-  const secs  = Array.from(steps).map(s => document.getElementById(s.dataset.target));
-
-  steps.forEach((s, i) => {
-    s.addEventListener('click', () => {
-      if (secs[i]) secs[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
-  });
-
-  function onScroll() {
-    let current = 0;
-    secs.forEach((sec, i) => {
-      if (sec && sec.getBoundingClientRect().top < window.innerHeight * 0.45) current = i;
-    });
-    steps.forEach((s, i) => {
-      s.classList.toggle('active', i === current);
-      s.classList.toggle('done', i < current);
-      s.querySelector('.dot').textContent = i < current ? '✓' : (i + 1);
-    });
-  }
-  window.addEventListener('scroll', onScroll, { passive: true });
-  onScroll();
+const steps = document.querySelectorAll('#stepper .step');
+const secs  = Array.from(steps).map(s => document.getElementById(s.dataset.target));
+steps.forEach((s, i) => {
+s.addEventListener('click', () => {
+if (secs[i]) secs[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+});
+function onScroll() {
+let current = 0;
+secs.forEach((sec, i) => {
+if (sec && sec.getBoundingClientRect().top < window.innerHeight * 0.45) current = i;
+});
+steps.forEach((s, i) => {
+s.classList.toggle('active', i === current);
+s.classList.toggle('done', i < current);
+s.querySelector('.dot').textContent = i < current ? '✓' : (i + 1);
+});
+}
+window.addEventListener('scroll', onScroll, { passive: true });
+onScroll();
 })();
 </script>
 @endsection
@@ -9528,6 +9700,215 @@ $kelasPersen = function ($p) {
             </tbody>
         </table>
     </div>
+</div>
+@endsection
+
+
+===== C:\xampp\htdocs\peternakan_ayam\resources\views\umum\home.blade.php =====
+@extends('layouts.umum')
+@section('title', 'Ringkasan Data')
+@section('content')
+<div class="row g-4 mb-4">
+<div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-label">Total Kandang</div><div class="stat-value">{{ $totalKandang }}</div></div></div>
+<div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-label">Populasi Ayam</div><div class="stat-value">{{ number_format($totalAyam) }}</div></div></div>
+<div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-label">Produksi Telur</div><div class="stat-value">{{ number_format($totalTelur) }}</div></div></div>
+<div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-label">Total Penjualan</div><div class="stat-value">Rp {{ number_format($totalPenjualan, 0, ',', '.') }}</div></div></div>
+</div>
+
+<div class="row g-4">
+<div class="col-lg-6">
+<div class="panel">
+<div class="panel-title">Produksi Telur Terbaru</div>
+<div class="table-responsive">
+<table class="table mb-0">
+<thead><tr><th>Tanggal</th><th>Kandang</th><th class="text-end">Produksi</th><th class="text-end">Bagus</th><th class="text-end">Reject</th></tr></thead>
+<tbody>
+@forelse($produksiTerbaru as $p)
+<tr><td>{{ $p->tanggal->format('d/m/Y') }}</td><td>{{ $p->kandang->nama ?? '-' }}</td><td class="text-end">{{ number_format($p->jumlah_produksi) }}</td><td class="text-end">{{ number_format($p->telur_bagus) }}</td><td class="text-end">{{ number_format($p->telur_reject) }}</td></tr>
+@empty
+<tr><td colspan="5" class="text-center text-muted py-3">Belum ada data.</td></tr>
+@endforelse
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<div class="col-lg-6">
+<div class="panel">
+<div class="panel-title">Penjualan Terbaru</div>
+<div class="table-responsive">
+<table class="table mb-0">
+<thead><tr><th>Tanggal</th><th>Customer</th><th class="text-end">Jumlah (ikat)</th><th class="text-end">Total</th></tr></thead>
+<tbody>
+@forelse($penjualanTerbaru as $j)
+<tr><td>{{ $j->tanggal->format('d/m/Y') }}</td><td>{{ $j->customer }}</td><td class="text-end">{{ number_format($j->jumlah) }}</td><td class="text-end">Rp {{ number_format($j->total, 0, ',', '.') }}</td></tr>
+@empty
+<tr><td colspan="4" class="text-center text-muted py-3">Belum ada data.</td></tr>
+@endforelse
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+@endsection
+
+
+===== C:\xampp\htdocs\peternakan_ayam\resources\views\umum\laporan.blade.php =====
+@extends('layouts.umum')
+@section('title', 'Laporan Harian')
+@section('content')
+<div class="panel">
+<div class="panel-title">Laporan Harian Man Power</div>
+<div class="table-responsive">
+<table class="table table-hover mb-0">
+<thead><tr><th>Tanggal</th><th>Kandang</th><th>Petugas</th><th class="text-end">Hidup</th><th class="text-end">Mati</th><th class="text-end">Afkir</th><th class="text-end">Sisa</th><th class="text-end">Pakan (kg)</th><th class="text-end">Telur</th></tr></thead>
+<tbody>
+@forelse($laporans as $l)
+<tr>
+<td>{{ $l->tanggal->format('d/m/Y') }}</td>
+<td>{{ $l->kandang->nama ?? '-' }}</td>
+<td>{{ $l->user->name ?? '-' }}</td>
+<td class="text-end">{{ number_format($l->hidup) }}</td>
+<td class="text-end text-danger">{{ number_format($l->mati) }}</td>
+<td class="text-end text-warning">{{ number_format($l->afkir) }}</td>
+<td class="text-end fw-bold text-success">{{ number_format($l->sisa_ayam) }}</td>
+<td class="text-end">{{ number_format($l->total_pakan, 1) }}</td>
+<td class="text-end">{{ number_format($l->produksi_telur) }}</td>
+</tr>
+@empty
+<tr><td colspan="9" class="text-center text-muted py-4">Belum ada laporan harian.</td></tr>
+@endforelse
+</tbody>
+</table>
+</div>
+</div>
+@endsection
+
+
+===== C:\xampp\htdocs\peternakan_ayam\resources\views\umum\pakan.blade.php =====
+@extends('layouts.umum')
+@section('title', 'Stok Pakan')
+@section('content')
+<div class="row g-4 mb-4">
+<div class="col-md-4">
+<div class="stat-card">
+<div class="stat-label">Stok Gudang Saat Ini</div>
+<div class="stat-value">{{ number_format($stokKg, 0) }} Kg</div>
+<div class="stat-label mt-1">≈ {{ number_format($stokKg / \App\Models\PakanKandang::ZAK_KE_KG, 1) }} zak</div>
+</div>
+</div>
+</div>
+<div class="panel">
+<div class="panel-title">Riwayat Pakan (Masuk / Keluar)</div>
+<div class="table-responsive">
+<table class="table table-hover mb-0">
+<thead><tr><th>Tanggal</th><th>Jenis</th><th>Kandang</th><th class="text-end">Masuk (zak)</th><th class="text-end">Keluar (Kg)</th></tr></thead>
+<tbody>
+@forelse($pakans as $p)
+<tr>
+<td>{{ $p->tanggal->format('d/m/Y') }}</td>
+<td>
+@if($p->kandang_id === null)<span class="badge bg-success">Masuk gudang</span>
+@else<span class="badge bg-warning text-dark">Pengambilan</span>@endif
+</td>
+<td>{{ $p->kandang->nama ?? '-' }}</td>
+<td class="text-end">{{ $p->kandang_id === null ? number_format($p->total_masuk, 1) : '-' }}</td>
+<td class="text-end">{{ $p->kandang_id !== null ? number_format($p->keluar, 1) : '-' }}</td>
+</tr>
+@empty
+<tr><td colspan="5" class="text-center text-muted py-4">Belum ada data pakan.</td></tr>
+@endforelse
+</tbody>
+</table>
+</div>
+</div>
+@endsection
+
+
+===== C:\xampp\htdocs\peternakan_ayam\resources\views\umum\penjualan.blade.php =====
+@extends('layouts.umum')
+@section('title', 'Penjualan Telur')
+@section('content')
+<div class="panel">
+<div class="panel-title">Data Penjualan Telur</div>
+<div class="table-responsive">
+<table class="table table-hover mb-0">
+<thead><tr><th>Tanggal</th><th>Customer</th><th class="text-end">Jumlah (ikat)</th><th class="text-end">Harga</th><th class="text-end">Total</th></tr></thead>
+<tbody>
+@forelse($penjualans as $j)
+<tr>
+<td>{{ $j->tanggal->format('d/m/Y') }}</td>
+<td>{{ $j->customer }}</td>
+<td class="text-end">{{ number_format($j->jumlah) }}</td>
+<td class="text-end">Rp {{ number_format($j->harga, 0, ',', '.') }}</td>
+<td class="text-end fw-bold">Rp {{ number_format($j->total, 0, ',', '.') }}</td>
+</tr>
+@empty
+<tr><td colspan="5" class="text-center text-muted py-4">Belum ada data penjualan.</td></tr>
+@endforelse
+</tbody>
+</table>
+</div>
+</div>
+@endsection
+
+
+===== C:\xampp\htdocs\peternakan_ayam\resources\views\umum\populasi.blade.php =====
+@extends('layouts.umum')
+@section('title', 'Populasi Ayam')
+@section('content')
+<div class="panel">
+<div class="panel-title">Data Populasi per Kandang</div>
+<div class="table-responsive">
+<table class="table table-hover mb-0">
+<thead><tr><th>Tanggal</th><th>Kandang</th><th class="text-end">Hidup</th><th class="text-end">Mati</th><th class="text-end">Afkir</th><th class="text-end">Sisa</th><th class="text-end">Usia</th></tr></thead>
+<tbody>
+@forelse($populasis as $p)
+<tr>
+<td>{{ $p->tanggal->format('d/m/Y') }}</td>
+<td>{{ $p->kandang->nama ?? '-' }}</td>
+<td class="text-end">{{ number_format($p->hidup) }}</td>
+<td class="text-end text-danger">{{ number_format($p->mati) }}</td>
+<td class="text-end text-warning">{{ number_format($p->afkir) }}</td>
+<td class="text-end fw-bold text-success">{{ number_format($p->sisa) }}</td>
+<td class="text-end">{{ intdiv((int) $p->usia, 7) }} mgg</td>
+</tr>
+@empty
+<tr><td colspan="7" class="text-center text-muted py-4">Belum ada data populasi.</td></tr>
+@endforelse
+</tbody>
+</table>
+</div>
+</div>
+@endsection
+
+
+===== C:\xampp\htdocs\peternakan_ayam\resources\views\umum\produksi.blade.php =====
+@extends('layouts.umum')
+@section('title', 'Produksi Telur')
+@section('content')
+<div class="panel">
+<div class="panel-title">Data Produksi Telur</div>
+<div class="table-responsive">
+<table class="table table-hover mb-0">
+<thead><tr><th>Tanggal</th><th>Kandang</th><th class="text-end">Produksi</th><th class="text-end">Telur Bagus</th><th class="text-end">Reject</th><th class="text-end">HDP</th></tr></thead>
+<tbody>
+@forelse($produksis as $p)
+<tr>
+<td>{{ $p->tanggal->format('d/m/Y') }}</td>
+<td>{{ $p->kandang->nama ?? '-' }}</td>
+<td class="text-end">{{ number_format($p->jumlah_produksi) }}</td>
+<td class="text-end">{{ number_format($p->telur_bagus) }}</td>
+<td class="text-end">{{ number_format($p->telur_reject) }}</td>
+<td class="text-end">{{ number_format((float) $p->presentase, 1) }}%</td>
+</tr>
+@empty
+<tr><td colspan="6" class="text-center text-muted py-4">Belum ada data produksi.</td></tr>
+@endforelse
+</tbody>
+</table>
+</div>
 </div>
 @endsection
 

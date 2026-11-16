@@ -9,14 +9,15 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 :root{
---coklat-900:#2d1b16; --coklat-800:#3e2723; --coklat-700:#4e342e;
---coklat-600:#5d4037; --coklat-500:#6d4c41; --coklat-400:#8d6e63;
---krem:#f7f2ea; --krem-2:#efe6d9; --aksen:#d7a86e;
---teks-terang:#ffe9c9;
+--navy-900:#152a45; --navy-800:#1e3a5f; --navy-700:#2c5282;
+--navy-600:#3b82f6; --navy-500:#60a5fa; --navy-400:#93c5fd;
+--background:#f0f4f8; --background-2:#e2e8f0; --aksen:#3b82f6;
+--teks-terang:#ffffff;
 }
 html{scroll-behavior:smooth}
-body{font-family:'Inter',sans-serif;background:var(--krem);color:#33261f;margin:0}
+body{font-family:'Inter',sans-serif;background:var(--background);color:#1a202c;margin:0}
 
+/* ===== NAVBAR ===== */
 .nav-landing{
 position:fixed; top:0; left:0; right:0; z-index:1030;
 background:transparent;
@@ -28,21 +29,20 @@ padding: 18px 0;
 .nav-landing .navbar-brand{display:flex; align-items:center; gap:10px; text-decoration:none;}
 .brand-logos{display:flex;align-items:center;gap:12px;}
 .nav-logo{height:46px;width:auto;object-fit:contain;display:block;background:transparent;border:none;box-shadow:none;border-radius:0;padding:0}
-/* ✅ logo PKN TANPA background putih */
 .nav-logo-pkn{height:42px;background:transparent;border-radius:0;padding:0;box-shadow:none;}
 .nav-landing.scrolled .nav-logo{height:38px}
 .nav-landing.scrolled .nav-logo-pkn{height:34px}
 .brand-egg{
 width:40px;height:40px;border-radius:10px;
-background:linear-gradient(135deg,var(--coklat-500),var(--coklat-400));
+background:linear-gradient(135deg,var(--navy-800),var(--navy-700));
 display:none;align-items:center;justify-content:center;
-color:#ffe9c9;font-size:20px;box-shadow:0 4px 12px rgba(0,0,0,.25);
+color:#fff;font-size:20px;box-shadow:0 4px 12px rgba(0,0,0,.25);
 }
 .brand-egg i{display:inline-block;animation:wobble 2.6s ease-in-out infinite}
 .nav-landing .nav-links a{color:var(--teks-terang);text-decoration:none;font-size:14px;font-weight:600;margin-left:22px;text-shadow:0 1px 6px rgba(0,0,0,.4);transition:color .2s,transform .2s;display:inline-block}
 .nav-landing .nav-links a:hover{color:#fff;transform:translateY(-1px)}
 .nav-landing.scrolled{
-background:rgba(45,27,22,.85);
+background:rgba(21,42,69,.9);
 backdrop-filter:blur(14px) saturate(140%);
 -webkit-backdrop-filter:blur(14px) saturate(140%);
 border-bottom:1px solid rgba(255,255,255,.08);
@@ -50,89 +50,196 @@ padding:10px 0;box-shadow:0 8px 24px rgba(0,0,0,.18);
 }
 .nav-landing.scrolled .nav-links a{color:rgba(255,255,255,.9);text-shadow:none}
 .nav-landing.scrolled .nav-links a:hover{color:#fff}
-.btn-cta{background:var(--aksen);color:var(--coklat-900);font-weight:700;border:none;padding:8px 18px}
-.btn-cta:hover{background:#c6935a;color:var(--coklat-900)}
+.btn-cta{background:var(--aksen);color:#fff;font-weight:700;border:none;padding:8px 18px}
+.btn-cta:hover{background:#2563eb;color:#fff}
 
-.hero{
-background:linear-gradient(135deg,var(--coklat-900) 0%,var(--coklat-700) 60%,var(--coklat-500) 100%);
-color:#fff;overflow:hidden;position:relative;
-padding:120px 0 60px;
+/* ===== HERO DENGAN GAMBAR BACKGROUND ===== */
+.hero-new{
+position:relative;
+min-height:640px;
+display:flex;
+align-items:center;
+background:
+linear-gradient(90deg, rgba(21,42,69,.95) 0%, rgba(21,42,69,.75) 45%, rgba(21,42,69,.15) 100%),
+url("{{ asset('gambar1.jpeg') }}") center/cover no-repeat;
+color:#fff;
+padding:140px 0 80px;
+overflow:hidden;
 }
-.hero::before{
-content:"";position:absolute;inset:0;
-background:radial-gradient(circle at 20% 30%, rgba(215,168,110,.15), transparent 40%),
-radial-gradient(circle at 80% 70%, rgba(215,168,110,.10), transparent 40%);
+.hero-new::before{
+content:"";
+position:absolute;
+top:0; left:0; right:0; bottom:0;
+background:radial-gradient(circle at 80% 50%, rgba(59,130,246,.15), transparent 50%);
 pointer-events:none;
 }
-.hero-badge{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#ffe9c9}
-.stage{position:relative;min-height:440px}
-.egg{position:absolute;background:linear-gradient(180deg,#fff8ee,#e8d5bd);border-radius:50% 50% 50% 50%/60% 60% 40% 40%;box-shadow:0 16px 28px rgba(0,0,0,.28)}
-.egg.s1{width:64px;height:80px;left:6%;top:30px;animation:float 3.2s .3s ease-in-out infinite}
-.egg.s2{width:46px;height:58px;right:8%;top:20px;animation:float 3.6s .8s ease-in-out infinite}
-.egg.s3{width:54px;height:68px;right:18%;bottom:60px;animation:float 3s 1.2s ease-in-out infinite}
-.chicken-wrap{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:320px;height:320px}
-.chicken-wrap svg{width:100%;height:100%;overflow:visible}
-.ch-body{transform-origin:50% 100%;animation:bodyBounce 1.4s ease-in-out infinite}
-.ch-head{transform-origin:50% 100%;animation:headNod 2s ease-in-out infinite}
-.ch-wing-left{transform-origin:90% 30%;animation:flapL .9s ease-in-out infinite}
-.ch-wing-right{transform-origin:10% 30%;animation:flapR .9s ease-in-out infinite}
-.ch-tail{transform-origin:50% 80%;animation:tailWag 1.8s ease-in-out infinite}
-.ch-comb{transform-origin:50% 100%;animation:combWiggle 1.4s ease-in-out infinite}
-.ch-eye{transform-origin:center;animation:blink 4s infinite}
-.ch-beak{transform-origin:50% 30%;animation:beakTalk 2.4s ease-in-out infinite}
-.ch-egg-drop{transform-origin:center;animation:eggDrop 3.5s ease-in infinite;opacity:0}
-.grass{transform-origin:bottom center;animation:grassSway 3s ease-in-out infinite}
-
-.wave-divider{
-position:relative;
-height:120px;
-overflow:hidden;
-background:linear-gradient(180deg, var(--coklat-500) 0%, var(--coklat-600) 100%);
+.hero-new .container{position:relative;z-index:1}
+.hero-new .badge-top{
+display:inline-flex;align-items:center;gap:8px;
+background:rgba(255,255,255,.15);
+border:1px solid rgba(255,255,255,.3);
+color:#fff;
+padding:8px 16px;
+border-radius:30px;
+font-size:13px;font-weight:600;
+margin-bottom:24px;
 }
-.wave{position:absolute;bottom:0;left:0;width:200%;height:100%;}
-.wave.w1{bottom:26px;opacity:.28;animation:waveMove 19s linear infinite;}
-.wave.w2{bottom:12px;opacity:.55;animation:waveMove 13s linear infinite reverse;}
-.wave.w3{bottom:0;opacity:1;animation:waveMove 9s linear infinite;}
-.wave.w1 path,.wave.w2 path{fill:var(--krem);}
-.wave.w3 path{fill:var(--krem-2);}
-@keyframes waveMove{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+.hero-new h1{
+font-size:52px;
+font-weight:900;
+line-height:1.1;
+margin-bottom:20px;
+letter-spacing:-0.5px;
+}
+.hero-new h1 span{color:var(--navy-500)}
+.hero-new p{
+font-size:16px;
+opacity:.9;
+line-height:1.6;
+max-width:540px;
+margin-bottom:32px;
+}
+.hero-new .hero-btns{display:flex;gap:14px;flex-wrap:wrap}
+.btn-hero-primary{
+background:var(--aksen);
+color:#fff;
+border:none;
+padding:14px 28px;
+border-radius:10px;
+font-weight:700;
+font-size:14px;
+text-decoration:none;
+display:inline-flex;align-items:center;gap:8px;
+transition:.2s;
+}
+.btn-hero-primary:hover{background:#2563eb;color:#fff;transform:translateY(-2px);box-shadow:0 8px 20px rgba(59,130,246,.4)}
+.btn-hero-outline{
+background:transparent;
+color:#fff;
+border:2px solid rgba(255,255,255,.5);
+padding:12px 26px;
+border-radius:10px;
+font-weight:700;
+font-size:14px;
+text-decoration:none;
+display:inline-flex;align-items:center;gap:8px;
+transition:.2s;
+}
+.btn-hero-outline:hover{background:rgba(255,255,255,.1);border-color:#fff;color:#fff}
 
-.section-title{font-weight:800}
-.feature-card{background:#fff;border:1px solid #e6dacc;border-radius:16px;padding:24px;height:100%;transition:.2s}
-.feature-card:hover{transform:translateY(-4px);box-shadow:0 12px 26px rgba(93,64,55,.14)}
-.feature-icon{width:48px;height:48px;border-radius:12px;background:var(--krem-2);color:var(--coklat-600);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:14px}
-.about{background:var(--krem-2)}
-.check-item i{color:var(--coklat-500)}
-footer{background:var(--coklat-900);color:#cbb5a8}
+/* ===== SECTION KANDANG ===== */
+.kandang-section{
+padding:80px 0;
+background:#fff;
+}
+.section-label{
+font-size:12px;
+font-weight:700;
+letter-spacing:1.5px;
+text-transform:uppercase;
+color:var(--aksen);
+margin-bottom:10px;
+}
+.section-title{
+font-size:32px;
+font-weight:800;
+color:var(--navy-900);
+margin-bottom:14px;
+}
+.section-subtitle{
+font-size:15px;
+color:#718096;
+margin-bottom:48px;
+max-width:620px;
+}
+.kandang-card{
+background:#fff;
+border:1px solid var(--background-2);
+border-radius:20px;
+overflow:hidden;
+transition:.3s;
+height:100%;
+}
+.kandang-card:hover{
+transform:translateY(-6px);
+box-shadow:0 20px 40px rgba(30,58,95,.12);
+border-color:var(--aksen);
+}
+.kandang-img-wrap{
+position:relative;
+height:280px;
+overflow:hidden;
+background:var(--background);
+}
+.kandang-img-wrap img{
+width:100%;
+height:100%;
+object-fit:cover;
+transition:transform .5s ease;
+}
+.kandang-card:hover .kandang-img-wrap img{transform:scale(1.06)}
+.kandang-body{padding:24px}
+.kandang-body h3{
+font-size:20px;
+font-weight:800;
+color:var(--navy-900);
+margin-bottom:10px;
+}
+.kandang-body p{
+font-size:14px;
+color:#718096;
+line-height:1.6;
+margin-bottom:18px;
+}
+.kandang-stats{
+display:grid;
+grid-template-columns:1fr;
+gap:12px;
+padding-top:16px;
+border-top:1px solid var(--background-2);
+}
+.kandang-stat{
+text-align:center;
+}
+.kandang-stat .val{
+font-size:18px;
+font-weight:800;
+color:var(--navy-900);
+display:block;
+}
+.kandang-stat .lbl{
+font-size:11px;
+color:#718096;
+text-transform:uppercase;
+letter-spacing:.5px;
+}
 
-@keyframes bodyBounce{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-8px) rotate(1deg)}}
-@keyframes headNod{0%,100%{transform:translateY(0) rotate(0)}25%{transform:translateY(-3px) rotate(-6deg)}75%{transform:translateY(-1px) rotate(5deg)}}
-@keyframes flapL{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(-35deg)}}
-@keyframes flapR{0%,100%{transform:rotate(5deg)}50%{transform:rotate(35deg)}}
-@keyframes tailWag{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(6deg)}}
-@keyframes combWiggle{0%,100%{transform:rotate(0)}50%{transform:rotate(3deg)}}
-@keyframes blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
-@keyframes beakTalk{0%,40%,100%{transform:rotate(0)}45%{transform:rotate(8deg)}55%{transform:rotate(-3deg)}65%{transform:rotate(5deg)}}
-@keyframes eggDrop{0%{transform:translate(0,0) scale(.6);opacity:0}15%{transform:translate(0,0) scale(.9);opacity:1}70%{transform:translate(-20px,120px) scale(1);opacity:1}90%{transform:translate(-25px,150px) scale(1.05);opacity:.7}100%{transform:translate(-30px,170px) scale(.8);opacity:0}}
-@keyframes grassSway{0%,100%{transform:skewX(-2deg)}50%{transform:skewX(3deg)}}
-@keyframes float{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-16px) rotate(2deg)}}
-@keyframes wobble{0%,100%{transform:rotate(0)}25%{transform:rotate(-10deg)}75%{transform:rotate(10deg)}}
+/* ===== TENTANG ===== */
+.about{background:var(--background)}
+.check-item i{color:var(--navy-600)}
+.feature-card{background:#fff;border:1px solid var(--background-2);border-radius:16px;padding:24px;height:100%;transition:.2s}
+.feature-card:hover{transform:translateY(-4px);box-shadow:0 12px 26px rgba(30,58,95,.14)}
+.feature-icon{width:48px;height:48px;border-radius:12px;background:var(--background-2);color:var(--navy-700);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:14px}
+
+/* ===== FOOTER ===== */
+footer{background:var(--navy-900);color:#cbd5e1}
+
+@keyframes wobble{0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); }}
 
 @media (max-width:991px){
-.chicken-wrap{width:240px;height:240px}
-.stage{min-height:340px}
+.hero-new{min-height:auto;padding:120px 0 60px;background-position:center}
+.hero-new h1{font-size:36px}
 .nav-landing .nav-links{display:none}
-.wave-divider{height:90px}
+.section-title{font-size:26px}
+.kandang-img-wrap{height:220px}
 .nav-logo{height:36px}
 .nav-logo-pkn{height:32px}
 }
 </style>
 </head>
 <body>
-
 <nav class="nav-landing" id="navLanding">
 <div class="container d-flex align-items-center justify-content-between">
-{{-- ✅ HANYA LOGO, TANPA TULISAN --}}
 <a href="{{ url('/') }}" class="navbar-brand">
 <span class="brand-logos">
 <img src="{{ asset('logo.png') }}" alt="Logo" class="nav-logo"
@@ -144,6 +251,7 @@ onerror="this.style.display='none';">
 </a>
 <div class="nav-links d-none d-md-block">
 <a href="#tentang">Tentang</a>
+<a href="#kandang">Kandang</a>
 </div>
 <div>
 @auth
@@ -159,111 +267,84 @@ Masuk <i class="bi bi-box-arrow-in-right ms-1"></i>
 </div>
 </nav>
 
-<header class="hero">
+{{-- ===== HERO DENGAN GAMBAR BACKGROUND ===== --}}
+<header class="hero-new">
 <div class="container">
-<div class="row align-items-center g-4">
-<div class="col-lg-6">
-<span class="badge hero-badge rounded-pill px-3 py-2 mb-3">
-<i class="bi bi-geo-alt-fill me-1"></i> Desa Tanjung Agung
+<div class="row align-items-center">
+<div class="col-lg-7">
+<span class="badge-top">
+<i class="bi bi-geo-alt-fill"></i> Desa Tanjung Agung
 </span>
-<h1 class="display-5 fw-bold lh-sm mb-3">
-Kelola Peternakan Ayam Jadi <span style="color:var(--aksen)">Lebih Mudah</span>
-</h1>
-<p class="lead mb-4" style="color:#e8d9c8">
-Aplikasi ini dikembangkan dengan dukungan PT Pesona Khatulistiwa Nusantara (PKN), perusahaan yang berkomitmen pada digitalisasi dan pemberdayaan masyarakat desa. Kehadiran PKN membantu peternak ayam di Desa Tanjung Agung beralih dari pencatatan manual ke sistem terintegrasi — populasi, produksi telur, penjualan, hingga pakan tercatat akurat dan dapat dipantau kapan saja.
+<h1>Pengelola Peternakan Ayam</h1>
+<p>
+Sistem Manajemen Peternakan Ayam dikembangkan dengan dukungan PT Pesona Khatulistiwa Nusantara (PKN), perusahaan yang berkomitmen pada digitalisasi dan pemberdayaan masyarakat desa. Kehadiran PKN membantu peternak ayam di Desa Tanjung Agung beralih dari pencatatan manual ke sistem terintegrasi.
 </p>
-</div>
-<div class="col-lg-6 d-none d-lg-block">
-<div class="stage">
-<div class="egg s1"></div>
-<div class="egg s2"></div>
-<div class="egg s3"></div>
-<div class="chicken-wrap">
-<svg viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg">
-<g class="grass">
-<path d="M40 290 Q60 270 80 290 Q100 270 120 290 Q140 270 160 290 Q180 270 200 290 Q220 270 240 290 Q260 270 280 290" stroke="#5d8a4a" stroke-width="4" fill="none" stroke-linecap="round"/>
-<path d="M50 295 L50 280 M90 295 L90 278 M130 295 L130 282 M170 295 L170 278 M210 295 L210 280 M250 295 L250 278" stroke="#6fa05a" stroke-width="2" stroke-linecap="round"/>
-</g>
-<ellipse cx="160" cy="285" rx="70" ry="8" fill="rgba(0,0,0,.25)"/>
-<g class="ch-body">
-<g class="ch-tail">
-<path d="M230 200 Q275 160 270 110 Q255 140 240 155 Q255 120 245 95 Q230 130 220 150 Q225 115 215 100 Q205 140 210 175 Z" fill="#5d4037"/>
-<path d="M232 195 Q265 160 260 120" stroke="#3e2723" stroke-width="2" fill="none"/>
-</g>
-<g>
-<line x1="140" y1="250" x2="135" y2="285" stroke="#f4b400" stroke-width="5" stroke-linecap="round"/>
-<line x1="180" y1="250" x2="185" y2="285" stroke="#f4b400" stroke-width="5" stroke-linecap="round"/>
-<path d="M125 285 L135 285 L145 285 M135 285 L135 295" stroke="#f4b400" stroke-width="4" stroke-linecap="round" fill="none"/>
-<path d="M175 285 L185 285 L195 285 M185 285 L185 295" stroke="#f4b400" stroke-width="4" stroke-linecap="round" fill="none"/>
-</g>
-<ellipse cx="160" cy="210" rx="75" ry="55" fill="#c9a27a"/>
-<ellipse cx="160" cy="215" rx="70" ry="50" fill="#d7b58f"/>
-<ellipse cx="150" cy="230" rx="40" ry="25" fill="#e8cfa8" opacity=".7"/>
-<g class="ch-wing-left">
-<path d="M210 180 Q250 190 245 230 Q230 215 215 220 Q225 205 210 195 Z" fill="#a0764f"/>
-<path d="M215 190 Q235 200 232 220" stroke="#7d5a3a" stroke-width="1.5" fill="none"/>
-</g>
-<g class="ch-wing-right">
-<path d="M110 180 Q70 190 75 230 Q90 215 105 220 Q95 205 110 195 Z" fill="#a0764f"/>
-<path d="M105 190 Q85 200 88 220" stroke="#7d5a3a" stroke-width="1.5" fill="none"/>
-</g>
-<g class="ch-head">
-<path d="M145 175 Q160 165 175 175 L175 200 L145 200 Z" fill="#d7b58f"/>
-<g class="ch-comb">
-<path d="M140 105 Q145 85 150 100 Q155 80 160 100 Q165 82 170 100 Q175 85 180 108 Q165 115 140 110 Z" fill="#d93636"/>
-<path d="M142 108 Q150 95 160 105 Q170 95 178 108" stroke="#a02020" stroke-width="1" fill="none"/>
-</g>
-<circle cx="160" cy="130" r="38" fill="#d7b58f"/>
-<circle cx="160" cy="132" r="34" fill="#e8cfa8"/>
-<circle cx="140" cy="138" r="6" fill="#f4b8b8" opacity=".7"/>
-<g>
-<circle cx="148" cy="125" r="6" fill="#fff"/>
-<circle cx="148" cy="125" r="4" fill="#2d1b16"/>
-<circle cx="149" cy="124" r="1.5" fill="#fff"/>
-<ellipse class="ch-eye" cx="148" cy="125" rx="6" ry="6" fill="#d7b58f" transform="scaleY(0)"/>
-</g>
-<g>
-<circle cx="172" cy="125" r="6" fill="#fff"/>
-<circle cx="172" cy="125" r="4" fill="#2d1b16"/>
-<circle cx="173" cy="124" r="1.5" fill="#fff"/>
-<ellipse class="ch-eye" cx="172" cy="125" rx="6" ry="6" fill="#d7b58f" transform="scaleY(0)"/>
-</g>
-<g class="ch-beak">
-<path d="M155 140 L165 140 L160 158 Z" fill="#f4b400"/>
-<path d="M155 140 L165 140" stroke="#c79000" stroke-width="1"/>
-<path d="M157 148 L163 148" stroke="#c79000" stroke-width=".5"/>
-</g>
-<path d="M155 155 Q160 172 165 155 Q163 165 160 165 Q157 165 155 155 Z" fill="#d93636"/>
-</g>
-<g class="ch-egg-drop">
-<ellipse cx="160" cy="260" rx="10" ry="13" fill="#fff8ee" stroke="#e8d5bd" stroke-width="1"/>
-<ellipse cx="158" cy="257" rx="3" ry="4" fill="#fff" opacity=".7"/>
-</g>
-</g>
-</svg>
+<div class="hero-btns">
+<a href="#kandang" class="btn-hero-primary">
+Lihat Kandang <i class="bi bi-arrow-right"></i>
+</a>
+<a href="#tentang" class="btn-hero-outline">
+Tentang Kami <i class="bi bi-chevron-right"></i>
+</a>
 </div>
 </div>
 </div>
 </div>
 </header>
 
-<div class="wave-divider" aria-hidden="true">
-<svg class="wave w1" viewBox="0 0 2880 140" preserveAspectRatio="none">
-<path d="M0,60 C240,100 480,100 720,60 C960,20 1200,20 1440,60 C1680,100 1920,100 2160,60 C2400,20 2640,20 2880,60 L2880,140 L0,140 Z"/>
-</svg>
-<svg class="wave w2" viewBox="0 0 2880 140" preserveAspectRatio="none">
-<path d="M0,70 C240,30 480,30 720,70 C960,110 1200,110 1440,70 C1680,30 1920,30 2160,70 C2400,110 2640,110 2880,70 L2880,140 L0,140 Z"/>
-</svg>
-<svg class="wave w3" viewBox="0 0 2880 140" preserveAspectRatio="none">
-<path d="M0,80 C240,120 480,120 720,80 C960,40 1200,40 1440,80 C1680,120 1920,120 2160,80 C2400,40 2640,40 2880,80 L2880,140 L0,140 Z"/>
-</svg>
+{{-- ===== SECTION KANDANG ===== --}}
+<section id="kandang" class="kandang-section">
+<div class="container">
+<div class="text-center">
+<div class="section-title">Kandang Kami</div>
 </div>
+<div class="row g-4">
+{{-- KANDANG 1 --}}
+<div class="col-md-6">
+<div class="kandang-card">
+<div class="kandang-img-wrap">
+<img src="{{ asset('kandang1.jpeg') }}" alt="Kandang 1">
+</div>
+<div class="kandang-body">
+<h3>Kandang 1</h3>
+<p>Kandang utama dengan kapasitas besar, dilengkapi sistem ventilasi dan pencahayaan yang optimal untuk kesehatan ayam.</p>
+<div class="kandang-stats">
+<div class="kandang-stat">
+<span class="val">Aktif</span>
+<span class="lbl">Status</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+{{-- KANDANG 2 --}}
+<div class="col-md-6">
+<div class="kandang-card">
+<div class="kandang-img-wrap">
+<img src="{{ asset('kandang2.jpeg') }}" alt="Kandang 2">
+</div>
+<div class="kandang-body">
+<h3>Kandang 2</h3>
+<p>Kandang pendukung dengan desain ergonomis, menjaga kebersihan dan kenyamanan ayam untuk produksi telur maksimal.</p>
+<div class="kandang-stats">
+<div class="kandang-stat">
+<span class="val">Aktif</span>
+<span class="lbl">Status</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
 
+{{-- ===== TENTANG ===== --}}
 <section id="tentang" class="about py-5">
 <div class="container py-4">
 <div class="row align-items-center g-4">
 <div class="col-lg-6">
-<h2 class="section-title mb-3">Tentang Aplikasi</h2>
+<div class="section-label">Tentang Aplikasi</div>
 <p class="mb-3">
 Aplikasi ini dibangun untuk membantu peternakan ayam di
 <strong>Desa Tanjung Agung</strong> mencatat dan mengelola data peternakan
@@ -280,15 +361,14 @@ dalam satu sistem yang bisa diakses kapan saja.
 </div>
 <div class="col-lg-6">
 <div class="feature-card text-center p-5">
-<div class="feature-icon mx-auto" style="width:70px;height:70px;font-size:32px">
-<i class="bi bi-egg-fried"></i>
-</div>
+<img src="{{ asset('logo.png') }}" alt="Logo" style="width:70px;height:70px;object-fit:contain;margin-bottom:16px;"
+onerror="this.style.display='none';">
 <p class="text-muted small mb-0 mt-3">Sistem Manajemen Peternakan Ayam</p>
 <div class="d-flex justify-content-center gap-2 flex-wrap mt-3">
-<span class="badge rounded-pill" style="background:var(--krem-2);color:var(--coklat-600)">
+<span class="badge rounded-pill" style="background:var(--background-2);color:var(--navy-700)">
 <i class="bi bi-geo-alt me-1"></i>Desa Tanjung Agung
 </span>
-<span class="badge rounded-pill" style="background:var(--krem-2);color:var(--coklat-600)">
+<span class="badge rounded-pill" style="background:var(--background-2);color:var(--navy-700)">
 <i class="bi bi-calendar3 me-1"></i>{{ date('Y') }}
 </span>
 </div>

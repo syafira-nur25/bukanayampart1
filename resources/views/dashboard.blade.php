@@ -337,7 +337,7 @@ new Chart(document.getElementById('mortalityChart'), {
         if (el) {
             setTimeout(function () {
                 el.scrollIntoView({ behavior: 'auto', block: 'start' });
-            }, 60); 
+            }, 60);
         }
     }
 })();
